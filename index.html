@@ -96,6 +96,7 @@
         <h2>Salvare / încărcare locală</h2>
         <div class="row">
           <button class="secondary" onclick="exportJson()">Exportă JSON</button>
+          <button class="secondary" onclick="exportTextAllocation()">Exportă alocare text</button>
           <label style="margin:0">
             Importă JSON
             <input type="file" accept="application/json" onchange="importJson(event)" />
@@ -696,6 +697,62 @@
   function exportJson() {
     const payload = { version: 1, exportedAt: new Date().toISOString(), items, players };
     document.getElementById('jsonOutput').value = JSON.stringify(payload, null, 2);
+  }
+
+  function exportTextAllocation() {
+    if (!players.length) {
+      document.getElementById('jsonOutput').value = 'Nu există jucători pentru export.';
+      return;
+    }
+
+    const allocations = getCurrentAllocationsForExport();
+
+    const text = allocations.map(player => {
+      const lines = [`${player.name} | ${player.cnp}`];
+
+      items.forEach(item => {
+        const quantity = player.allocated[item.key] || 0;
+        if (quantity > 0) lines.push(`${item.name} | ${quantity}`);
+      });
+
+      return lines.join('\n');
+    }).join('\n\n');
+
+    document.getElementById('jsonOutput').value = text;
+  }
+
+  function getCurrentAllocationsForExport() {
+    const allocations = players.map(p => ({
+      ...p,
+      allocated: Object.fromEntries(items.map(i => [i.key, 0])),
+      revenue: 0,
+      maxValue: items.reduce((sum, i) => sum + ((p.quantities[i.key] || 0) * i.price), 0),
+      targetValue: 0,
+    }));
+
+    const itemSummaries = items.map(item => {
+      const totalRequested = players.reduce((sum, p) => sum + (p.quantities[item.key] || 0), 0);
+      return {
+        item,
+        totalRequested,
+        capacity: item.capacity,
+        deliverableQuantity: Math.min(item.capacity, totalRequested),
+        finalAllocated: 0,
+        limited: totalRequested > item.capacity,
+        totalRevenue: 0,
+      };
+    });
+
+    const totalAvailableValue = itemSummaries.reduce((sum, s) => sum + (s.deliverableQuantity * s.item.price), 0);
+    const minimumForcedValues = computeMinimumForcedValues(allocations, itemSummaries);
+    const fairTargets = computeBoundedFairTargets(minimumForcedValues, allocations.map(p => p.maxValue), totalAvailableValue);
+    allocations.forEach((p, index) => {
+      p.minimumForcedValue = minimumForcedValues[index];
+      p.targetValue = fairTargets[index];
+    });
+
+    allocateBalancedByMoney(allocations, itemSummaries);
+    return allocations;
   }
 
   function importJson(event) {
