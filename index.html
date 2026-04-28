@@ -329,60 +329,96 @@
   }
 
   function allocateBalancedByMoney(allocations, itemSummaries) {
-    const remainingCapacity = Object.fromEntries(itemSummaries.map(s => [s.item.key, s.deliverableQuantity]));
-    const currentRevenue = allocations.map(() => 0);
+    const deliverableByItem = Object.fromEntries(itemSummaries.map(s => [s.item.key, s.deliverableQuantity]));
+    let bestAllocations = null;
+    let bestRevenue = null;
+    let bestScore = null;
 
-    function availableItemsForPlayer(playerIndex) {
-      return items.filter(item => {
-        const already = allocations[playerIndex].allocated[item.key] || 0;
-        const requested = allocations[playerIndex].quantities[item.key] || 0;
-        return remainingCapacity[item.key] > 0 && already < requested;
-      });
+    const baseOrders = [
+      [...items].sort((a, b) => b.price - a.price),
+      [...items].sort((a, b) => a.price - b.price),
+      [...items],
+      [...items].reverse(),
+    ];
+
+    for (const order of baseOrders) {
+      runGreedyTrial(order);
     }
 
-    function canStillReceive(playerIndex) {
-      return availableItemsForPlayer(playerIndex).length > 0;
+    let seed = 123456789;
+    for (let trial = 0; trial < 90; trial++) {
+      const order = shuffleDeterministic([...items], seed + trial * 9973);
+      runGreedyTrial(order);
     }
 
-    function remainingUnitsTotal() {
-      return Object.values(remainingCapacity).reduce((sum, qty) => sum + qty, 0);
+    for (let playerIndex = 0; playerIndex < allocations.length; playerIndex++) {
+      allocations[playerIndex].allocated = bestAllocations[playerIndex];
     }
 
-    while (remainingUnitsTotal() > 0 && allocations.some((_, index) => canStillReceive(index))) {
-      const candidates = [];
+    bestRevenue.splice(0, bestRevenue.length, ...allocations.map(p => items.reduce((sum, item) => sum + ((p.allocated[item.key] || 0) * item.price), 0)));
+    improveByTransfers(allocations, bestRevenue);
+    improveBySwaps(allocations, bestRevenue);
+    improveByComboSwaps(allocations, bestRevenue);
 
-      for (let playerIndex = 0; playerIndex < allocations.length; playerIndex++) {
-        for (const item of availableItemsForPlayer(playerIndex)) {
-          const candidateRevenue = [...currentRevenue];
-          candidateRevenue[playerIndex] += item.price;
+    function runGreedyTrial(order) {
+      const trialAllocations = allocations.map(() => Object.fromEntries(items.map(i => [i.key, 0])));
+      const trialRevenue = allocations.map(() => 0);
+      const remainingCapacity = { ...deliverableByItem };
 
-          candidates.push({
-            playerIndex,
-            item,
-            score: targetBalanceScore(candidateRevenue, allocations),
-            targetDiffAfter: Math.abs(allocations[playerIndex].targetValue - candidateRevenue[playerIndex]),
-          });
+      for (const item of order) {
+        while (remainingCapacity[item.key] > 0) {
+          let bestPlayer = -1;
+          let bestCandidateScore = null;
+
+          for (let playerIndex = 0; playerIndex < allocations.length; playerIndex++) {
+            const requested = allocations[playerIndex].quantities[item.key] || 0;
+            if (trialAllocations[playerIndex][item.key] >= requested) continue;
+
+            const candidateRevenue = [...trialRevenue];
+            candidateRevenue[playerIndex] += item.price;
+            const candidateScore = targetBalanceScore(candidateRevenue, allocations);
+
+            if (!bestCandidateScore || isBetterScore(candidateScore, bestCandidateScore)) {
+              bestCandidateScore = candidateScore;
+              bestPlayer = playerIndex;
+            } else if (scoreEquals(candidateScore, bestCandidateScore)) {
+              const currentDiff = Math.abs(allocations[playerIndex].targetValue - candidateRevenue[playerIndex]);
+              const bestDiff = Math.abs(allocations[bestPlayer].targetValue - (trialRevenue[bestPlayer] + item.price));
+              if (currentDiff < bestDiff) bestPlayer = playerIndex;
+            }
+          }
+
+          if (bestPlayer === -1) break;
+          trialAllocations[bestPlayer][item.key] += 1;
+          trialRevenue[bestPlayer] += item.price;
+          remainingCapacity[item.key] -= 1;
         }
       }
 
-      if (!candidates.length) break;
+      const score = targetBalanceScore(trialRevenue, allocations);
+      if (!bestScore || isBetterScore(score, bestScore)) {
+        bestScore = score;
+        bestRevenue = trialRevenue;
+        bestAllocations = trialAllocations.map(a => ({ ...a }));
+      }
+    }
+  }
 
-      candidates.sort((a, b) => {
-        if (a.score.maxTargetDiff !== b.score.maxTargetDiff) return a.score.maxTargetDiff - b.score.maxTargetDiff;
-        if (a.score.sumTargetDiff !== b.score.sumTargetDiff) return a.score.sumTargetDiff - b.score.sumTargetDiff;
-        if (a.score.range !== b.score.range) return a.score.range - b.score.range;
-        if (a.targetDiffAfter !== b.targetDiffAfter) return a.targetDiffAfter - b.targetDiffAfter;
-        return a.item.price - b.item.price;
-      });
-
-      const best = candidates[0];
-      allocations[best.playerIndex].allocated[best.item.key] += 1;
-      currentRevenue[best.playerIndex] += best.item.price;
-      remainingCapacity[best.item.key] -= 1;
+  function shuffleDeterministic(array, seed) {
+    function random() {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 4294967296;
     }
 
-    improveByTransfers(allocations, currentRevenue);
-    improveBySwaps(allocations, currentRevenue);
+    for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+  }
+
+  function scoreEquals(a, b) {
+    return a.maxTargetDiff === b.maxTargetDiff && a.sumTargetDiff === b.sumTargetDiff && a.range === b.range;
   }
 
   function targetBalanceScore(revenues, allocations) {
@@ -481,6 +517,92 @@
         changed = true;
       }
     }
+  }
+
+  function improveByComboSwaps(allocations, currentRevenue) {
+    let changed = true;
+    let guard = 0;
+
+    while (changed && guard < 5000) {
+      changed = false;
+      guard += 1;
+
+      const oldScore = targetBalanceScore(currentRevenue, allocations);
+      let bestMove = null;
+
+      for (let high = 0; high < allocations.length; high++) {
+        for (let low = 0; low < allocations.length; low++) {
+          if (high === low || currentRevenue[high] <= currentRevenue[low]) continue;
+
+          const highItems = expandedAllocatedItems(allocations[high]);
+          const lowItems = expandedAllocatedItems(allocations[low]);
+
+          for (const giveHigh of highItems) {
+            if ((allocations[low].allocated[giveHigh.key] || 0) >= (allocations[low].quantities[giveHigh.key] || 0)) continue;
+
+            const lowCombos = buildCombos(lowItems, 3);
+            for (const giveLowCombo of lowCombos) {
+              if (!comboCanMoveTo(giveLowCombo, allocations[high])) continue;
+
+              const comboValue = giveLowCombo.reduce((sum, item) => sum + item.price, 0);
+              if (giveHigh.price <= comboValue) continue;
+
+              const candidateRevenue = [...currentRevenue];
+              candidateRevenue[high] = candidateRevenue[high] - giveHigh.price + comboValue;
+              candidateRevenue[low] = candidateRevenue[low] + giveHigh.price - comboValue;
+              const candidateScore = targetBalanceScore(candidateRevenue, allocations);
+
+              if (isBetterScore(candidateScore, oldScore) && (!bestMove || isBetterScore(candidateScore, bestMove.score))) {
+                bestMove = { high, low, giveHigh, giveLowCombo, revenue: candidateRevenue, score: candidateScore };
+              }
+            }
+          }
+        }
+      }
+
+      if (bestMove) {
+        allocations[bestMove.high].allocated[bestMove.giveHigh.key] -= 1;
+        allocations[bestMove.low].allocated[bestMove.giveHigh.key] += 1;
+
+        for (const item of bestMove.giveLowCombo) {
+          allocations[bestMove.low].allocated[item.key] -= 1;
+          allocations[bestMove.high].allocated[item.key] += 1;
+        }
+
+        currentRevenue.splice(0, currentRevenue.length, ...bestMove.revenue);
+        changed = true;
+      }
+    }
+  }
+
+  function expandedAllocatedItems(player) {
+    const result = [];
+    for (const item of items) {
+      const count = player.allocated[item.key] || 0;
+      for (let i = 0; i < Math.min(count, 8); i++) result.push(item);
+    }
+    return result;
+  }
+
+  function buildCombos(list, maxSize) {
+    const combos = [[]];
+    for (const item of list) {
+      const currentLength = combos.length;
+      for (let i = 0; i < currentLength; i++) {
+        if (combos[i].length >= maxSize) continue;
+        combos.push([...combos[i], item]);
+      }
+    }
+    return combos.filter(combo => combo.length > 0);
+  }
+
+  function comboCanMoveTo(combo, receiver) {
+    const counts = {};
+    for (const item of combo) counts[item.key] = (counts[item.key] || 0) + 1;
+
+    return Object.entries(counts).every(([key, count]) => {
+      return (receiver.allocated[key] || 0) + count <= (receiver.quantities[key] || 0);
+    });
   }
 
   function balanceScore(revenues) {
