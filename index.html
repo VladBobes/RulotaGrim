@@ -382,6 +382,7 @@
     }
 
     improveByTransfers(allocations, currentRevenue);
+    improveBySwaps(allocations, currentRevenue);
   }
 
   function targetBalanceScore(revenues, allocations) {
@@ -428,6 +429,55 @@
         allocations[bestMove.from].allocated[bestMove.item.key] -= 1;
         allocations[bestMove.to].allocated[bestMove.item.key] += 1;
         currentRevenue.splice(0, currentRevenue.length, ...bestMove.revenue);
+        changed = true;
+      }
+    }
+  }
+
+  function improveBySwaps(allocations, currentRevenue) {
+    let changed = true;
+    let guard = 0;
+
+    while (changed && guard < 20000) {
+      changed = false;
+      guard += 1;
+
+      const oldScore = targetBalanceScore(currentRevenue, allocations);
+      let bestSwap = null;
+
+      for (let high = 0; high < allocations.length; high++) {
+        for (let low = 0; low < allocations.length; low++) {
+          if (high === low || currentRevenue[high] <= currentRevenue[low]) continue;
+
+          for (const expensiveItem of items) {
+            if ((allocations[high].allocated[expensiveItem.key] || 0) <= 0) continue;
+            if ((allocations[low].allocated[expensiveItem.key] || 0) >= (allocations[low].quantities[expensiveItem.key] || 0)) continue;
+
+            for (const cheapItem of items) {
+              if (cheapItem.key === expensiveItem.key) continue;
+              if ((allocations[low].allocated[cheapItem.key] || 0) <= 0) continue;
+              if ((allocations[high].allocated[cheapItem.key] || 0) >= (allocations[high].quantities[cheapItem.key] || 0)) continue;
+
+              const candidateRevenue = [...currentRevenue];
+              candidateRevenue[high] = candidateRevenue[high] - expensiveItem.price + cheapItem.price;
+              candidateRevenue[low] = candidateRevenue[low] + expensiveItem.price - cheapItem.price;
+
+              const candidateScore = targetBalanceScore(candidateRevenue, allocations);
+
+              if (isBetterScore(candidateScore, oldScore) && (!bestSwap || isBetterScore(candidateScore, bestSwap.score))) {
+                bestSwap = { high, low, expensiveItem, cheapItem, score: candidateScore, revenue: candidateRevenue };
+              }
+            }
+          }
+        }
+      }
+
+      if (bestSwap) {
+        allocations[bestSwap.high].allocated[bestSwap.expensiveItem.key] -= 1;
+        allocations[bestSwap.low].allocated[bestSwap.expensiveItem.key] += 1;
+        allocations[bestSwap.low].allocated[bestSwap.cheapItem.key] -= 1;
+        allocations[bestSwap.high].allocated[bestSwap.cheapItem.key] += 1;
+        currentRevenue.splice(0, currentRevenue.length, ...bestSwap.revenue);
         changed = true;
       }
     }
