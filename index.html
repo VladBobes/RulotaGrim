@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Calculator inventar și împărțire venituri</title>
+  <style>
+    :root {
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #172033;
+      background: #f5f7fb;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px; }
+    .app { max-width: 1180px; margin: 0 auto; }
+    h1 { margin: 0 0 8px; font-size: 28px; }
+    h2 { margin: 0 0 14px; font-size: 18px; }
+    p { color: #5b6475; }
+    .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; }
+    .card {
+      background: white;
+      border: 1px solid #e4e8f0;
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: 0 10px 24px rgba(20, 32, 55, 0.06);
+    }
+    .span-4 { grid-column: span 4; }
+    .span-8 { grid-column: span 8; }
+    .span-12 { grid-column: span 12; }
+    label { display: block; font-size: 13px; font-weight: 700; margin: 10px 0 6px; }
+    input, select, button, textarea {
+      width: 100%;
+      border: 1px solid #d7ddea;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font: inherit;
+      background: white;
+    }
+    button {
+      cursor: pointer;
+      border: 0;
+      background: #1f6feb;
+      color: white;
+      font-weight: 800;
+      margin-top: 12px;
+    }
+    button.secondary { background: #eef3ff; color: #1f4fbf; }
+    button.danger { background: #fff0f0; color: #b42318; }
+    table { width: 100%; border-collapse: collapse; overflow: hidden; }
+    th, td { border-bottom: 1px solid #edf0f6; padding: 10px; text-align: left; vertical-align: top; }
+    th { color: #44506a; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .items { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .pill { display: inline-flex; gap: 6px; align-items: center; background: #f1f5ff; color: #21428f; padding: 4px 8px; border-radius: 999px; margin: 2px; font-size: 12px; }
+    .muted { color: #697386; font-size: 13px; }
+    .warning { background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; padding: 10px 12px; border-radius: 12px; }
+    .ok { background: #ecfdf3; border: 1px solid #bbf7d0; color: #166534; padding: 10px 12px; border-radius: 12px; }
+    .actions { display: flex; gap: 8px; }
+    .actions button { margin-top: 0; }
+    @media (max-width: 900px) { .span-4, .span-8 { grid-column: span 12; } .items { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <h1>Calculator inventar și împărțire venituri</h1>
+    <p>Aplicație statică pentru GitHub Pages pentru calculul livrărilor și împărțirea încasărilor din GTA V RageMP.</p>
+
+    <div class="grid">
+      <section class="card span-4">
+        <h2>Adaugă jucător</h2>
+        <label>Nume</label>
+        <input id="playerName" placeholder="Ex: Vlad" />
+
+        <label>CNP / ID intern, 1–5 cifre</label>
+        <input id="playerCnp" inputmode="numeric" maxlength="5" placeholder="Ex: 12345" />
+
+        <div class="items" id="itemInputs"></div>
+
+        <button onclick="addPlayer()">Adaugă jucător</button>
+        <button class="secondary" onclick="calculate()">Calculează împărțirea</button>
+        <button class="danger" onclick="resetAll()">Resetează tot</button>
+        <p class="muted">Logica alocă proporțional cererea când cererea totală depășește capacitatea rulotei pe fiecare tip de drog din joc.</p>
+      </section>
+
+      <section class="card span-8">
+        <h2>Jucători introduși</h2>
+        <div id="playersTable"></div>
+      </section>
+
+      <section class="card span-12">
+        <h2>Rezultat calcul</h2>
+        <div id="result"></div>
+      </section>
+
+      <section class="card span-12">
+        <h2>Salvare / încărcare locală</h2>
+        <div class="row">
+          <button class="secondary" onclick="exportJson()">Exportă JSON</button>
+          <label style="margin:0">
+            Importă JSON
+            <input type="file" accept="application/json" onchange="importJson(event)" />
+          </label>
+        </div>
+        <textarea id="jsonOutput" rows="6" placeholder="Aici apare exportul JSON"></textarea>
+      </section>
+    </div>
+  </div>
+
+<script>
+  const items = [
+    { key: 'plicCocaina', name: 'Plic cocaină', capacity: 800, price: 13600 },
+    { key: 'joint', name: 'Joint', capacity: 600, price: 7500 },
+    { key: 'tigara', name: 'Țigară', capacity: 600, price: 4700 },
+    { key: 'redFire', name: 'Red Fire', capacity: 490, price: 5400 },
+    { key: 'greenHaze', name: 'Green Haze', capacity: 490, price: 8600 },
+    { key: 'blueCurrent', name: 'Blue Current', capacity: 490, price: 12600 },
+  ];
+
+  let players = JSON.parse(localStorage.getItem('players') || '[]');
+
+  function money(value) {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
+  }
+
+  function save() {
+    localStorage.setItem('players', JSON.stringify(players));
+  }
+
+  function renderInputs() {
+    const container = document.getElementById('itemInputs');
+    container.innerHTML = items.map(item => `
+      <div>
+        <label>${item.name}</label>
+        <input id="qty_${item.key}" type="number" min="0" step="1" placeholder="0" />
+        <div class="muted">Cap: ${item.capacity}, preț: ${money(item.price)}</div>
+      </div>
+    `).join('');
+  }
+
+  function renderPlayers() {
+    const el = document.getElementById('playersTable');
+    if (!players.length) {
+      el.innerHTML = '<p class="muted">Nu ai adăugat încă jucători.</p>';
+      return;
+    }
+
+    el.innerHTML = `
+      <table>
+        <thead><tr><th>Nume</th><th>CNP/ID</th><th>Cantități cerute</th><th></th></tr></thead>
+        <tbody>
+          ${players.map((p, idx) => `
+            <tr>
+              <td>${escapeHtml(p.name)}</td>
+              <td>${escapeHtml(p.cnp)}</td>
+              <td>${items.map(i => p.quantities[i.key] ? `<span class="pill">${i.name}: ${p.quantities[i.key]}</span>` : '').join('')}</td>
+              <td><button class="danger" onclick="removePlayer(${idx})">Șterge</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  function addPlayer() {
+    const name = document.getElementById('playerName').value.trim();
+    const cnp = document.getElementById('playerCnp').value.trim();
+
+    if (!name) return alert('Adaugă numele.');
+    if (!/^\d{1,5}$/.test(cnp)) return alert('CNP/ID trebuie să aibă 1–5 cifre.');
+    if (players.some(p => p.cnp === cnp)) return alert('Există deja un jucător cu acest CNP/ID.');
+
+    const quantities = {};
+    let total = 0;
+    for (const item of items) {
+      const value = Number(document.getElementById(`qty_${item.key}`).value || 0);
+      if (!Number.isInteger(value) || value < 0) return alert(`Cantitatea pentru ${item.name} trebuie să fie număr întreg pozitiv.`);
+      quantities[item.key] = value;
+      total += value;
+    }
+    if (total === 0) return alert('Adaugă cel puțin o cantitate.');
+
+    players.push({ name, cnp, quantities });
+    save();
+    document.getElementById('playerName').value = '';
+    document.getElementById('playerCnp').value = '';
+    items.forEach(item => document.getElementById(`qty_${item.key}`).value = '');
+    renderPlayers();
+    calculate();
+  }
+
+  function removePlayer(index) {
+    players.splice(index, 1);
+    save();
+    renderPlayers();
+    calculate();
+  }
+
+  function resetAll() {
+    if (!confirm('Sigur ștergi tot?')) return;
+    players = [];
+    save();
+    renderPlayers();
+    document.getElementById('result').innerHTML = '';
+  }
+
+  function calculate() {
+    if (!players.length) {
+      document.getElementById('result').innerHTML = '<p class="muted">Adaugă jucători pentru calcul.</p>';
+      return;
+    }
+
+    const allocations = players.map(p => ({ ...p, allocated: {}, revenue: 0 }));
+    const itemSummaries = [];
+
+    for (const item of items) {
+      const totalRequested = players.reduce((sum, p) => sum + (p.quantities[item.key] || 0), 0);
+      const capacity = item.capacity;
+      const ratio = totalRequested > capacity ? capacity / totalRequested : 1;
+
+      let allocatedSum = 0;
+      const remainders = [];
+
+      allocations.forEach((p, idx) => {
+        const requested = p.quantities[item.key] || 0;
+        const raw = requested * ratio;
+        const base = Math.floor(raw);
+        p.allocated[item.key] = base;
+        allocatedSum += base;
+        remainders.push({ idx, remainder: raw - base, requested });
+      });
+
+      let remaining = Math.min(capacity, totalRequested) - allocatedSum;
+      remainders
+        .filter(r => r.requested > 0)
+        .sort((a, b) => b.remainder - a.remainder)
+        .slice(0, remaining)
+        .forEach(r => allocations[r.idx].allocated[item.key] += 1);
+
+      allocations.forEach(p => {
+        p.revenue += p.allocated[item.key] * item.price;
+      });
+
+      const finalAllocated = allocations.reduce((sum, p) => sum + p.allocated[item.key], 0);
+      itemSummaries.push({
+        item,
+        totalRequested,
+        finalAllocated,
+        capacity,
+        limited: totalRequested > capacity,
+        totalRevenue: finalAllocated * item.price,
+      });
+    }
+
+    const grandTotal = allocations.reduce((sum, p) => sum + p.revenue, 0);
+
+    document.getElementById('result').innerHTML = `
+      ${itemSummaries.some(s => s.limited)
+        ? '<div class="warning">Unele cereri depășesc capacitatea. Aplicația a împărțit proporțional cantitățile disponibile.</div>'
+        : '<div class="ok">Toate cererile încap în capacitatea disponibilă.</div>'}
+
+      <h2 style="margin-top:18px">Alocare pe jucător</h2>
+      <table>
+        <thead>
+          <tr><th>Jucător</th>${items.map(i => `<th>${i.name}</th>`).join('')}<th>Total bani</th></tr>
+        </thead>
+        <tbody>
+          ${allocations.map(p => `
+            <tr>
+              <td>${escapeHtml(p.name)}<br><span class="muted">${escapeHtml(p.cnp)}</span></td>
+              ${items.map(i => `<td>${p.allocated[i.key] || 0}</td>`).join('')}
+              <td><strong>${money(p.revenue)}</strong></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+
+      <h2 style="margin-top:18px">Sumar pe item</h2>
+      <table>
+        <thead><tr><th>Item</th><th>Cerut</th><th>Alocat</th><th>Capacitate</th><th>Venit total</th></tr></thead>
+        <tbody>
+          ${itemSummaries.map(s => `
+            <tr>
+              <td>${s.item.name}</td>
+              <td>${s.totalRequested}</td>
+              <td>${s.finalAllocated}</td>
+              <td>${s.capacity}</td>
+              <td>${money(s.totalRevenue)}</td>
+            </tr>
+          `).join('')}
+          <tr><td colspan="4"><strong>Total general</strong></td><td><strong>${money(grandTotal)}</strong></td></tr>
+        </tbody>
+      </table>
+    `;
+  }
+
+  function exportJson() {
+    const payload = { version: 1, exportedAt: new Date().toISOString(), items, players };
+    document.getElementById('jsonOutput').value = JSON.stringify(payload, null, 2);
+  }
+
+  function importJson(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const payload = JSON.parse(reader.result);
+        if (!Array.isArray(payload.players)) throw new Error('JSON invalid');
+        players = payload.players;
+        save();
+        renderPlayers();
+        calculate();
+      } catch (e) {
+        alert('Fișier JSON invalid.');
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function escapeHtml(value) {
+    return String(value)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+
+  renderInputs();
+  renderPlayers();
+  calculate();
+</script>
+</body>
+</html>
