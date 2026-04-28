@@ -234,15 +234,14 @@
       };
     });
 
-    allocateBalancedByMoney(allocations, itemSummaries);
+    const commonFairTarget = Math.min(...allocations.filter(p => p.maxValue > 0).map(p => p.maxValue));
+    allocations.forEach(p => p.targetValue = Math.min(p.maxValue, commonFairTarget));
+
+    allocateBalancedByMoney(allocations, itemSummaries, commonFairTarget);
 
     allocations.forEach(p => {
       p.revenue = items.reduce((sum, item) => sum + ((p.allocated[item.key] || 0) * item.price), 0);
     });
-
-    const totalDeliveredValue = allocations.reduce((sum, p) => sum + p.revenue, 0);
-    const fairTargets = computeEqualFairTargets(allocations.map(p => p.maxValue), totalDeliveredValue);
-    allocations.forEach((p, index) => p.targetValue = fairTargets[index]);
 
     itemSummaries.forEach(s => {
       s.finalAllocated = allocations.reduce((sum, p) => sum + (p.allocated[s.item.key] || 0), 0);
@@ -328,7 +327,7 @@
     return targets;
   }
 
-  function allocateBalancedByMoney(allocations, itemSummaries) {
+  function allocateBalancedByMoney(allocations, itemSummaries, commonFairTarget) {
     const remainingCapacity = Object.fromEntries(itemSummaries.map(s => [s.item.key, s.deliverableQuantity]));
     const currentRevenue = allocations.map(() => 0);
 
@@ -340,37 +339,42 @@
       });
     }
 
-    function canStillReceive(playerIndex) {
-      return availableItemsForPlayer(playerIndex).length > 0;
+    function targetFor(playerIndex) {
+      return Math.min(allocations[playerIndex].maxValue, commonFairTarget);
     }
 
-    while (allocations.some((_, index) => canStillReceive(index))) {
-      const maxValues = allocations.map((p, index) => {
-        const remainingValue = items.reduce((sum, item) => {
-          const availableByPlayer = (p.quantities[item.key] || 0) - (p.allocated[item.key] || 0);
-          const available = Math.min(Math.max(availableByPlayer, 0), remainingCapacity[item.key]);
-          return sum + available * item.price;
-        }, 0);
-        return currentRevenue[index] + remainingValue;
+    function canStillReceiveUseful(playerIndex) {
+      const target = targetFor(playerIndex);
+      if (currentRevenue[playerIndex] >= target) return false;
+
+      return availableItemsForPlayer(playerIndex).some(item => {
+        const before = Math.abs(target - currentRevenue[playerIndex]);
+        const after = Math.abs(target - (currentRevenue[playerIndex] + item.price));
+        return after < before;
       });
+    }
 
-      const remainingTotalValue = Object.entries(remainingCapacity).reduce((sum, [key, qty]) => {
-        const item = items.find(i => i.key === key);
-        return sum + qty * item.price;
-      }, 0);
-
-      const targets = computeEqualFairTargets(maxValues, currentRevenue.reduce((a, b) => a + b, 0) + remainingTotalValue);
-
+    while (allocations.some((_, index) => canStillReceiveUseful(index))) {
       const candidates = [];
+
       for (let playerIndex = 0; playerIndex < allocations.length; playerIndex++) {
+        const target = targetFor(playerIndex);
+        if (currentRevenue[playerIndex] >= target) continue;
+
         for (const item of availableItemsForPlayer(playerIndex)) {
-          const before = Math.abs(targets[playerIndex] - currentRevenue[playerIndex]);
-          const after = Math.abs(targets[playerIndex] - (currentRevenue[playerIndex] + item.price));
+          const before = Math.abs(target - currentRevenue[playerIndex]);
+          const afterRevenue = currentRevenue[playerIndex] + item.price;
+          const after = Math.abs(target - afterRevenue);
+          const improvement = before - after;
+
+          if (improvement <= 0) continue;
+
           candidates.push({
             playerIndex,
             item,
-            deficit: targets[playerIndex] - currentRevenue[playerIndex],
-            improvement: before - after,
+            deficit: target - currentRevenue[playerIndex],
+            improvement,
+            overshoot: Math.max(0, afterRevenue - target),
           });
         }
       }
@@ -379,6 +383,7 @@
 
       candidates.sort((a, b) => {
         if (a.deficit !== b.deficit) return b.deficit - a.deficit;
+        if (a.overshoot !== b.overshoot) return a.overshoot - b.overshoot;
         if (a.improvement !== b.improvement) return b.improvement - a.improvement;
         return a.item.price - b.item.price;
       });
