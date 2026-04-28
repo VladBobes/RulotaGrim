@@ -234,10 +234,11 @@
       };
     });
 
-    const commonFairTarget = Math.min(...allocations.filter(p => p.maxValue > 0).map(p => p.maxValue));
-    allocations.forEach(p => p.targetValue = Math.min(p.maxValue, commonFairTarget));
+    const totalAvailableValue = itemSummaries.reduce((sum, s) => sum + (s.deliverableQuantity * s.item.price), 0);
+    const fairTargets = computeEqualFairTargets(allocations.map(p => p.maxValue), totalAvailableValue);
+    allocations.forEach((p, index) => p.targetValue = fairTargets[index]);
 
-    allocateBalancedByMoney(allocations, itemSummaries, commonFairTarget);
+    allocateBalancedByMoney(allocations, itemSummaries);
 
     allocations.forEach(p => {
       p.revenue = items.reduce((sum, item) => sum + ((p.allocated[item.key] || 0) * item.price), 0);
@@ -327,7 +328,7 @@
     return targets;
   }
 
-  function allocateBalancedByMoney(allocations, itemSummaries, commonFairTarget) {
+  function allocateBalancedByMoney(allocations, itemSummaries) {
     const remainingCapacity = Object.fromEntries(itemSummaries.map(s => [s.item.key, s.deliverableQuantity]));
     const currentRevenue = allocations.map(() => 0);
 
@@ -339,42 +340,27 @@
       });
     }
 
-    function targetFor(playerIndex) {
-      return Math.min(allocations[playerIndex].maxValue, commonFairTarget);
+    function canStillReceive(playerIndex) {
+      return availableItemsForPlayer(playerIndex).length > 0;
     }
 
-    function canStillReceiveUseful(playerIndex) {
-      const target = targetFor(playerIndex);
-      if (currentRevenue[playerIndex] >= target) return false;
-
-      return availableItemsForPlayer(playerIndex).some(item => {
-        const before = Math.abs(target - currentRevenue[playerIndex]);
-        const after = Math.abs(target - (currentRevenue[playerIndex] + item.price));
-        return after < before;
-      });
+    function remainingUnitsTotal() {
+      return Object.values(remainingCapacity).reduce((sum, qty) => sum + qty, 0);
     }
 
-    while (allocations.some((_, index) => canStillReceiveUseful(index))) {
+    while (remainingUnitsTotal() > 0 && allocations.some((_, index) => canStillReceive(index))) {
       const candidates = [];
 
       for (let playerIndex = 0; playerIndex < allocations.length; playerIndex++) {
-        const target = targetFor(playerIndex);
-        if (currentRevenue[playerIndex] >= target) continue;
-
         for (const item of availableItemsForPlayer(playerIndex)) {
-          const before = Math.abs(target - currentRevenue[playerIndex]);
-          const afterRevenue = currentRevenue[playerIndex] + item.price;
-          const after = Math.abs(target - afterRevenue);
-          const improvement = before - after;
-
-          if (improvement <= 0) continue;
+          const candidateRevenue = [...currentRevenue];
+          candidateRevenue[playerIndex] += item.price;
 
           candidates.push({
             playerIndex,
             item,
-            deficit: target - currentRevenue[playerIndex],
-            improvement,
-            overshoot: Math.max(0, afterRevenue - target),
+            score: targetBalanceScore(candidateRevenue, allocations),
+            targetDiffAfter: Math.abs(allocations[playerIndex].targetValue - candidateRevenue[playerIndex]),
           });
         }
       }
@@ -382,9 +368,10 @@
       if (!candidates.length) break;
 
       candidates.sort((a, b) => {
-        if (a.deficit !== b.deficit) return b.deficit - a.deficit;
-        if (a.overshoot !== b.overshoot) return a.overshoot - b.overshoot;
-        if (a.improvement !== b.improvement) return b.improvement - a.improvement;
+        if (a.score.maxTargetDiff !== b.score.maxTargetDiff) return a.score.maxTargetDiff - b.score.maxTargetDiff;
+        if (a.score.sumTargetDiff !== b.score.sumTargetDiff) return a.score.sumTargetDiff - b.score.sumTargetDiff;
+        if (a.score.range !== b.score.range) return a.score.range - b.score.range;
+        if (a.targetDiffAfter !== b.targetDiffAfter) return a.targetDiffAfter - b.targetDiffAfter;
         return a.item.price - b.item.price;
       });
 
@@ -397,6 +384,15 @@
     improveByTransfers(allocations, currentRevenue);
   }
 
+  function targetBalanceScore(revenues, allocations) {
+    const diffs = revenues.map((value, index) => Math.abs(value - allocations[index].targetValue));
+    return {
+      maxTargetDiff: Math.max(...diffs),
+      sumTargetDiff: diffs.reduce((sum, value) => sum + value, 0),
+      range: Math.max(...revenues) - Math.min(...revenues),
+    };
+  }
+
   function improveByTransfers(allocations, currentRevenue) {
     let changed = true;
     let guard = 0;
@@ -405,7 +401,7 @@
       changed = false;
       guard += 1;
 
-      const oldScore = balanceScore(currentRevenue);
+      const oldScore = targetBalanceScore(currentRevenue, allocations);
       let bestMove = null;
 
       for (let from = 0; from < allocations.length; from++) {
@@ -419,7 +415,7 @@
             const candidateRevenue = [...currentRevenue];
             candidateRevenue[from] -= item.price;
             candidateRevenue[to] += item.price;
-            const candidateScore = balanceScore(candidateRevenue);
+            const candidateScore = targetBalanceScore(candidateRevenue, allocations);
 
             if (isBetterScore(candidateScore, oldScore) && (!bestMove || isBetterScore(candidateScore, bestMove.score))) {
               bestMove = { from, to, item, score: candidateScore, revenue: candidateRevenue };
@@ -447,9 +443,9 @@
   }
 
   function isBetterScore(a, b) {
-    if (a.range !== b.range) return a.range < b.range;
-    if (a.sumSquares !== b.sumSquares) return a.sumSquares < b.sumSquares;
-    return a.maxRevenue < b.maxRevenue;
+    if (a.maxTargetDiff !== b.maxTargetDiff) return a.maxTargetDiff < b.maxTargetDiff;
+    if (a.sumTargetDiff !== b.sumTargetDiff) return a.sumTargetDiff < b.sumTargetDiff;
+    return a.range < b.range;
   }
 
   function exportJson() {
