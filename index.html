@@ -238,7 +238,10 @@
       p.targetValue = fairTargets[index];
     });
 
-    allocateByBalancedRevenue(allocations, itemSummaries);.revenue = items.reduce((sum, item) => sum + ((p.allocated[item.key] || 0) * item.price), 0);
+    allocateByBalancedRevenue(allocations, itemSummaries);
+
+    allocations.forEach(p => {
+      p.revenue = items.reduce((sum, item) => sum + ((p.allocated[item.key] || 0) * item.price), 0);
     });
 
     itemSummaries.forEach(s => {
@@ -261,7 +264,8 @@
             ${items.map(i => `<th>${i.name}</th>`).join('')}
             <th>Valoare cerută</th>
             <th>Țintă corectă</th>
-            <th>Tota    <th>Diferență</th>
+            <th>Total primit</th>
+            <th>Diferență</th>
           </tr>
         </thead>
         <tbody>
@@ -328,8 +332,7 @@
     return targets;
   }
 
-  function allocateByClosestValue(allocations, itemSummaries) {
-function allocateByBalancedRevenue(allocations, itemSummaries) {
+  function allocateByBalancedRevenue(allocations, itemSummaries) {
     const remainingCapacity = Object.fromEntries(itemSummaries.map(s => [s.item.key, s.deliverableQuantity]));
     const remainingRequest = allocations.map(p => Object.fromEntries(items.map(i => [i.key, p.quantities[i.key] || 0])));
     const currentRevenue = allocations.map(() => 0);
@@ -454,7 +457,8 @@ function allocateByBalancedRevenue(allocations, itemSummaries) {
     return a.maxRevenue < b.maxRevenue;
   }
 
-  function exportJson() {OString(), items, players };
+  function exportJson() {
+    const payload = { version: 1, exportedAt: new Date().toISOString(), items, players };
     document.getElementById('jsonOutput').value = JSON.stringify(payload, null, 2);
   }
 
