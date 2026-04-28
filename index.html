@@ -146,7 +146,7 @@
 
     el.innerHTML = `
       <table>
-        <thead><tr><th>Nume</th><th>CNP/ID</th><th>Cantități cerute</th><th></th></tr></thead>
+        <thead><tr><th>Nume</th><th>CNP/ID</th><th>Cantități introduse</th><th></th></tr></thead>
         <tbody>
           ${players.map((p, idx) => `
             <tr>
@@ -161,12 +161,16 @@
     `;
   }
 
+  function isValidCnp(value) {
+    return value.length >= 1 && value.length <= 5 && [...value].every(ch => ch >= '0' && ch <= '9');
+  }
+
   function addPlayer() {
     const name = document.getElementById('playerName').value.trim();
     const cnp = document.getElementById('playerCnp').value.trim();
 
     if (!name) return alert('Adaugă numele.');
-    if (!/^\d{1,5}$/.test(cnp)) return alert('CNP/ID trebuie să aibă 1–5 cifre.');
+    if (!isValidCnp(cnp)) return alert('CNP/ID trebuie să aibă 1–5 cifre.');
     if (players.some(p => p.cnp === cnp)) return alert('Există deja un jucător cu acest CNP/ID.');
 
     const quantities = {};
@@ -213,7 +217,7 @@
       ...p,
       allocated: Object.fromEntries(items.map(i => [i.key, 0])),
       revenue: 0,
-      requestedValue: items.reduce((sum, i) => sum + ((p.quantities[i.key] || 0) * i.price), 0),
+      maxValue: items.reduce((sum, i) => sum + ((p.quantities[i.key] || 0) * i.price), 0),
       targetValue: 0,
     }));
 
@@ -230,19 +234,15 @@
       };
     });
 
-    const totalRequestedValue = allocations.reduce((sum, p) => sum + p.requestedValue, 0);
-    const totalDeliverableValue = itemSummaries.reduce((sum, s) => sum + (s.deliverableQuantity * s.item.price), 0);
-
-    const fairTargets = computeEqualFairTargets(allocations, totalDeliverableValue);
-    allocations.forEach((p, index) => {
-      p.targetValue = fairTargets[index];
-    });
-
-    allocateByBalancedRevenue(allocations, itemSummaries);
+    allocateBalancedByMoney(allocations, itemSummaries);
 
     allocations.forEach(p => {
       p.revenue = items.reduce((sum, item) => sum + ((p.allocated[item.key] || 0) * item.price), 0);
     });
+
+    const totalDeliveredValue = allocations.reduce((sum, p) => sum + p.revenue, 0);
+    const fairTargets = computeEqualFairTargets(allocations.map(p => p.maxValue), totalDeliveredValue);
+    allocations.forEach((p, index) => p.targetValue = fairTargets[index]);
 
     itemSummaries.forEach(s => {
       s.finalAllocated = allocations.reduce((sum, p) => sum + (p.allocated[s.item.key] || 0), 0);
@@ -253,8 +253,8 @@
 
     document.getElementById('result').innerHTML = `
       ${itemSummaries.some(s => s.limited)
-        ? '<div class="warning">Unele cereri depășesc capacitatea. Aplicația a împărțit livrarea după valoarea în bani, cât mai egal între jucători. Dacă un jucător nu poate atinge partea egală, diferența se redistribuie către ceilalți.</div>'
-        : '<div class="ok">Toate cererile încap în capacitatea disponibilă.</div>'}
+        ? '<div class="warning">Unele cantități depășesc capacitatea rulotei. Aplicația încearcă să echilibreze valoarea în bani între jucători, respectând ce poate livra fiecare.</div>'
+        : '<div class="ok">Toate cantitățile încap în capacitatea disponibilă.</div>'}
 
       <h2 style="margin-top:18px">Alocare pe jucător</h2>
       <table>
@@ -262,8 +262,8 @@
           <tr>
             <th>Jucător</th>
             ${items.map(i => `<th>${i.name}</th>`).join('')}
-            <th>Valoare cerută</th>
-            <th>Țintă corectă</th>
+            <th>Maxim posibil</th>
+            <th>Țintă orientativă</th>
             <th>Total primit</th>
             <th>Diferență</th>
           </tr>
@@ -273,7 +273,7 @@
             <tr>
               <td>${escapeHtml(p.name)}<br><span class="muted">${escapeHtml(p.cnp)}</span></td>
               ${items.map(i => `<td>${p.allocated[i.key] || 0}</td>`).join('')}
-              <td>${money(p.requestedValue)}</td>
+              <td>${money(p.maxValue)}</td>
               <td>${money(p.targetValue)}</td>
               <td><strong>${money(p.revenue)}</strong></td>
               <td>${money(p.revenue - p.targetValue)}</td>
@@ -282,9 +282,9 @@
         </tbody>
       </table>
 
-      <h2 style="margin-top:18px">Sumar pe item</h2>
+      <h2 style="margin-top:18px">Sumar pe drog</h2>
       <table>
-        <thead><tr><th>Item</th><th>Cerut</th><th>Alocat</th><th>Capacitate</th><th>Venit total</th></tr></thead>
+        <thead><tr><th>Drog</th><th>Cerut</th><th>Alocat</th><th>Capacitate</th><th>Venit total</th></tr></thead>
         <tbody>
           ${itemSummaries.map(s => `
             <tr>
@@ -301,30 +301,26 @@
     `;
   }
 
-  function computeEqualFairTargets(allocations, totalDeliverableValue) {
-    const targets = Array(allocations.length).fill(0);
-    const remainingPlayers = new Set(allocations.map((_, index) => index));
-    let remainingValue = totalDeliverableValue;
+  function computeEqualFairTargets(maxValues, totalValue) {
+    const targets = Array(maxValues.length).fill(0);
+    const remaining = new Set(maxValues.map((_, index) => index));
+    let valueLeft = totalValue;
 
-    while (remainingPlayers.size > 0) {
-      const equalShare = remainingValue / remainingPlayers.size;
-      let cappedAnyPlayer = false;
+    while (remaining.size > 0) {
+      const share = valueLeft / remaining.size;
+      let capped = false;
 
-      for (const index of Array.from(remainingPlayers)) {
-        const maxPlayerValue = allocations[index].requestedValue;
-
-        if (maxPlayerValue <= equalShare) {
-          targets[index] = maxPlayerValue;
-          remainingValue -= maxPlayerValue;
-          remainingPlayers.delete(index);
-          cappedAnyPlayer = true;
+      for (const index of Array.from(remaining)) {
+        if (maxValues[index] <= share) {
+          targets[index] = maxValues[index];
+          valueLeft -= maxValues[index];
+          remaining.delete(index);
+          capped = true;
         }
       }
 
-      if (!cappedAnyPlayer) {
-        for (const index of remainingPlayers) {
-          targets[index] = equalShare;
-        }
+      if (!capped) {
+        for (const index of remaining) targets[index] = share;
         break;
       }
     }
@@ -332,80 +328,75 @@
     return targets;
   }
 
-  function allocateByBalancedRevenue(allocations, itemSummaries) {
+  function allocateBalancedByMoney(allocations, itemSummaries) {
     const remainingCapacity = Object.fromEntries(itemSummaries.map(s => [s.item.key, s.deliverableQuantity]));
-    const remainingRequest = allocations.map(p => Object.fromEntries(items.map(i => [i.key, p.quantities[i.key] || 0])));
     const currentRevenue = allocations.map(() => 0);
 
-    function canReceive(playerIndex) {
-      return items.some(item => remainingCapacity[item.key] > 0 && remainingRequest[playerIndex][item.key] > 0);
+    function availableItemsForPlayer(playerIndex) {
+      return items.filter(item => {
+        const already = allocations[playerIndex].allocated[item.key] || 0;
+        const requested = allocations[playerIndex].quantities[item.key] || 0;
+        return remainingCapacity[item.key] > 0 && already < requested;
+      });
     }
 
-    function availableItemsFor(playerIndex) {
-      return items.filter(item => remainingCapacity[item.key] > 0 && remainingRequest[playerIndex][item.key] > 0);
+    function canStillReceive(playerIndex) {
+      return availableItemsForPlayer(playerIndex).length > 0;
     }
 
-    function flexibility(playerIndex) {
-      return items.filter(item => remainingRequest[playerIndex][item.key] > 0).length;
-    }
-
-    while (allocations.some((_, index) => canReceive(index))) {
-      const eligiblePlayers = allocations
-        .map((_, index) => index)
-        .filter(index => canReceive(index));
-
-      eligiblePlayers.sort((a, b) => {
-        const revenueDiff = currentRevenue[a] - currentRevenue[b];
-        if (revenueDiff !== 0) return revenueDiff;
-
-        const flexibilityDiff = flexibility(a) - flexibility(b);
-        if (flexibilityDiff !== 0) return flexibilityDiff;
-
-        return allocations[a].requestedValue - allocations[b].requestedValue;
+    while (allocations.some((_, index) => canStillReceive(index))) {
+      const maxValues = allocations.map((p, index) => {
+        const remainingValue = items.reduce((sum, item) => {
+          const availableByPlayer = (p.quantities[item.key] || 0) - (p.allocated[item.key] || 0);
+          const available = Math.min(Math.max(availableByPlayer, 0), remainingCapacity[item.key]);
+          return sum + available * item.price;
+        }, 0);
+        return currentRevenue[index] + remainingValue;
       });
 
-      const playerIndex = eligiblePlayers[0];
-      const playerItems = availableItemsFor(playerIndex);
+      const remainingTotalValue = Object.entries(remainingCapacity).reduce((sum, [key, qty]) => {
+        const item = items.find(i => i.key === key);
+        return sum + qty * item.price;
+      }, 0);
 
-      const nextLowestRevenue = eligiblePlayers.length > 1
-        ? currentRevenue[eligiblePlayers[1]]
-        : currentRevenue[playerIndex];
+      const targets = computeEqualFairTargets(maxValues, currentRevenue.reduce((a, b) => a + b, 0) + remainingTotalValue);
 
-      playerItems.sort((a, b) => {
-        const aAfter = currentRevenue[playerIndex] + a.price;
-        const bAfter = currentRevenue[playerIndex] + b.price;
+      const candidates = [];
+      for (let playerIndex = 0; playerIndex < allocations.length; playerIndex++) {
+        for (const item of availableItemsForPlayer(playerIndex)) {
+          const before = Math.abs(targets[playerIndex] - currentRevenue[playerIndex]);
+          const after = Math.abs(targets[playerIndex] - (currentRevenue[playerIndex] + item.price));
+          candidates.push({
+            playerIndex,
+            item,
+            deficit: targets[playerIndex] - currentRevenue[playerIndex],
+            improvement: before - after,
+          });
+        }
+      }
 
-        const aOvershoot = Math.max(0, aAfter - nextLowestRevenue);
-        const bOvershoot = Math.max(0, bAfter - nextLowestRevenue);
-        if (aOvershoot !== bOvershoot) return aOvershoot - bOvershoot;
+      if (!candidates.length) break;
 
-        const aScarcity = countEligiblePlayersForItem(a.key, remainingRequest, remainingCapacity);
-        const bScarcity = countEligiblePlayersForItem(b.key, remainingRequest, remainingCapacity);
-        if (aScarcity !== bScarcity) return bScarcity - aScarcity;
-
-        return a.price - b.price;
+      candidates.sort((a, b) => {
+        if (a.deficit !== b.deficit) return b.deficit - a.deficit;
+        if (a.improvement !== b.improvement) return b.improvement - a.improvement;
+        return a.item.price - b.item.price;
       });
 
-      const item = playerItems[0];
-      allocations[playerIndex].allocated[item.key] += 1;
-      currentRevenue[playerIndex] += item.price;
-      remainingRequest[playerIndex][item.key] -= 1;
-      remainingCapacity[item.key] -= 1;
+      const best = candidates[0];
+      allocations[best.playerIndex].allocated[best.item.key] += 1;
+      currentRevenue[best.playerIndex] += best.item.price;
+      remainingCapacity[best.item.key] -= 1;
     }
 
     improveByTransfers(allocations, currentRevenue);
-  }
-
-  function countEligiblePlayersForItem(itemKey, remainingRequest, remainingCapacity) {
-    if (remainingCapacity[itemKey] <= 0) return 0;
-    return remainingRequest.filter(request => request[itemKey] > 0).length;
   }
 
   function improveByTransfers(allocations, currentRevenue) {
     let changed = true;
     let guard = 0;
 
-    while (changed && guard < 10000) {
+    while (changed && guard < 20000) {
       changed = false;
       guard += 1;
 
@@ -442,18 +433,17 @@
   }
 
   function balanceScore(revenues) {
-    const sorted = [...revenues].sort((a, b) => a - b);
-    const median = sorted[Math.floor(sorted.length / 2)];
+    const avg = revenues.reduce((a, b) => a + b, 0) / revenues.length;
     return {
       range: Math.max(...revenues) - Math.min(...revenues),
-      absoluteDeviation: revenues.reduce((sum, value) => sum + Math.abs(value - median), 0),
+      sumSquares: revenues.reduce((sum, value) => sum + Math.pow(value - avg, 2), 0),
       maxRevenue: Math.max(...revenues),
     };
   }
 
   function isBetterScore(a, b) {
     if (a.range !== b.range) return a.range < b.range;
-    if (a.absoluteDeviation !== b.absoluteDeviation) return a.absoluteDeviation < b.absoluteDeviation;
+    if (a.sumSquares !== b.sumSquares) return a.sumSquares < b.sumSquares;
     return a.maxRevenue < b.maxRevenue;
   }
 
