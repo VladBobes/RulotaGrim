@@ -235,8 +235,12 @@
     });
 
     const totalAvailableValue = itemSummaries.reduce((sum, s) => sum + (s.deliverableQuantity * s.item.price), 0);
-    const fairTargets = computeEqualFairTargets(allocations.map(p => p.maxValue), totalAvailableValue);
-    allocations.forEach((p, index) => p.targetValue = fairTargets[index]);
+    const minimumForcedValues = computeMinimumForcedValues(allocations, itemSummaries);
+    const fairTargets = computeBoundedFairTargets(minimumForcedValues, allocations.map(p => p.maxValue), totalAvailableValue);
+    allocations.forEach((p, index) => {
+      p.minimumForcedValue = minimumForcedValues[index];
+      p.targetValue = fairTargets[index];
+    });
 
     allocateBalancedByMoney(allocations, itemSummaries);
 
@@ -263,7 +267,8 @@
             <th>Jucător</th>
             ${items.map(i => `<th>${i.name}</th>`).join('')}
             <th>Maxim posibil</th>
-            <th>Țintă orientativă</th>
+            <th>Minim forțat</th>
+            <th>Țintă corectă</th>
             <th>Total primit</th>
             <th>Diferență</th>
           </tr>
@@ -274,6 +279,7 @@
               <td>${escapeHtml(p.name)}<br><span class="muted">${escapeHtml(p.cnp)}</span></td>
               ${items.map(i => `<td>${p.allocated[i.key] || 0}</td>`).join('')}
               <td>${money(p.maxValue)}</td>
+              <td>${money(p.minimumForcedValue || 0)}</td>
               <td>${money(p.targetValue)}</td>
               <td><strong>${money(p.revenue)}</strong></td>
               <td>${money(p.revenue - p.targetValue)}</td>
@@ -301,31 +307,39 @@
     `;
   }
 
-  function computeEqualFairTargets(maxValues, totalValue) {
-    const targets = Array(maxValues.length).fill(0);
-    const remaining = new Set(maxValues.map((_, index) => index));
-    let valueLeft = totalValue;
+  function computeMinimumForcedValues(allocations, itemSummaries) {
+    return allocations.map((player, playerIndex) => {
+      return itemSummaries.reduce((sum, summary) => {
+        const item = summary.item;
+        const totalRequestedByOthers = allocations.reduce((otherSum, otherPlayer, otherIndex) => {
+          return otherIndex === playerIndex ? otherSum : otherSum + (otherPlayer.quantities[item.key] || 0);
+        }, 0);
 
-    while (remaining.size > 0) {
-      const share = valueLeft / remaining.size;
-      let capped = false;
+        const forcedQuantity = Math.max(0, summary.deliverableQuantity - totalRequestedByOthers);
+        return sum + forcedQuantity * item.price;
+      }, 0);
+    });
+  }
 
-      for (const index of Array.from(remaining)) {
-        if (maxValues[index] <= share) {
-          targets[index] = maxValues[index];
-          valueLeft -= maxValues[index];
-          remaining.delete(index);
-          capped = true;
-        }
-      }
+  function computeBoundedFairTargets(minValues, maxValues, totalValue) {
+    let low = Math.min(...minValues);
+    let high = Math.max(...maxValues);
 
-      if (!capped) {
-        for (const index of remaining) targets[index] = share;
-        break;
-      }
+    for (let i = 0; i < 80; i++) {
+      const mid = (low + high) / 2;
+      const sum = minValues.reduce((acc, minValue, index) => {
+        return acc + Math.min(Math.max(mid, minValue), maxValues[index]);
+      }, 0);
+
+      if (sum < totalValue) low = mid;
+      else high = mid;
     }
 
-    return targets;
+    return minValues.map((minValue, index) => Math.min(Math.max(high, minValue), maxValues[index]));
+  }
+
+  function computeEqualFairTargets(maxValues, totalValue) {
+    return computeBoundedFairTargets(Array(maxValues.length).fill(0), maxValues, totalValue);
   }
 
   function allocateBalancedByMoney(allocations, itemSummaries) {
