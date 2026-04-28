@@ -238,10 +238,7 @@
       p.targetValue = fairTargets[index];
     });
 
-    allocateByClosestValue(allocations, itemSummaries);
-
-    allocations.forEach(p => {
-      p.revenue = items.reduce((sum, item) => sum + ((p.allocated[item.key] || 0) * item.price), 0);
+    allocateByBalancedRevenue(allocations, itemSummaries);.revenue = items.reduce((sum, item) => sum + ((p.allocated[item.key] || 0) * item.price), 0);
     });
 
     itemSummaries.forEach(s => {
@@ -264,8 +261,7 @@
             ${items.map(i => `<th>${i.name}</th>`).join('')}
             <th>Valoare cerută</th>
             <th>Țintă corectă</th>
-            <th>Total primit</th>
-            <th>Diferență</th>
+            <th>Tota    <th>Diferență</th>
           </tr>
         </thead>
         <tbody>
@@ -333,56 +329,132 @@
   }
 
   function allocateByClosestValue(allocations, itemSummaries) {
+function allocateByBalancedRevenue(allocations, itemSummaries) {
     const remainingCapacity = Object.fromEntries(itemSummaries.map(s => [s.item.key, s.deliverableQuantity]));
     const remainingRequest = allocations.map(p => Object.fromEntries(items.map(i => [i.key, p.quantities[i.key] || 0])));
     const currentRevenue = allocations.map(() => 0);
-    let remainingUnits = Object.values(remainingCapacity).reduce((sum, qty) => sum + qty, 0);
 
-    while (remainingUnits > 0) {
-      let best = null;
+    function canReceive(playerIndex) {
+      return items.some(item => remainingCapacity[item.key] > 0 && remainingRequest[playerIndex][item.key] > 0);
+    }
 
-      for (const item of items) {
-        if ((remainingCapacity[item.key] || 0) <= 0) continue;
+    function availableItemsFor(playerIndex) {
+      return items.filter(item => remainingCapacity[item.key] > 0 && remainingRequest[playerIndex][item.key] > 0);
+    }
 
-        for (let playerIndex = 0; playerIndex < allocations.length; playerIndex++) {
-          if ((remainingRequest[playerIndex][item.key] || 0) <= 0) continue;
+    function flexibility(playerIndex) {
+      return items.filter(item => remainingRequest[playerIndex][item.key] > 0).length;
+    }
 
-          const target = allocations[playerIndex].targetValue;
-          const before = Math.abs(target - currentRevenue[playerIndex]);
-          const after = Math.abs(target - (currentRevenue[playerIndex] + item.price));
-          const improvement = before - after;
-          const deficit = target - currentRevenue[playerIndex];
-          const harm = after - before;
+    while (allocations.some((_, index) => canReceive(index))) {
+      const eligiblePlayers = allocations
+        .map((_, index) => index)
+        .filter(index => canReceive(index));
 
-          const candidate = { item, playerIndex, improvement, deficit, harm };
+      eligiblePlayers.sort((a, b) => {
+        const revenueDiff = currentRevenue[a] - currentRevenue[b];
+        if (revenueDiff !== 0) return revenueDiff;
 
-          if (!best) {
-            best = candidate;
-            continue;
+        const flexibilityDiff = flexibility(a) - flexibility(b);
+        if (flexibilityDiff !== 0) return flexibilityDiff;
+
+        return allocations[a].requestedValue - allocations[b].requestedValue;
+      });
+
+      const playerIndex = eligiblePlayers[0];
+      const playerItems = availableItemsFor(playerIndex);
+
+      const nextLowestRevenue = eligiblePlayers.length > 1
+        ? currentRevenue[eligiblePlayers[1]]
+        : currentRevenue[playerIndex];
+
+      playerItems.sort((a, b) => {
+        const aAfter = currentRevenue[playerIndex] + a.price;
+        const bAfter = currentRevenue[playerIndex] + b.price;
+
+        const aOvershoot = Math.max(0, aAfter - nextLowestRevenue);
+        const bOvershoot = Math.max(0, bAfter - nextLowestRevenue);
+        if (aOvershoot !== bOvershoot) return aOvershoot - bOvershoot;
+
+        const aScarcity = countEligiblePlayersForItem(a.key, remainingRequest, remainingCapacity);
+        const bScarcity = countEligiblePlayersForItem(b.key, remainingRequest, remainingCapacity);
+        if (aScarcity !== bScarcity) return bScarcity - aScarcity;
+
+        return a.price - b.price;
+      });
+
+      const item = playerItems[0];
+      allocations[playerIndex].allocated[item.key] += 1;
+      currentRevenue[playerIndex] += item.price;
+      remainingRequest[playerIndex][item.key] -= 1;
+      remainingCapacity[item.key] -= 1;
+    }
+
+    improveByTransfers(allocations, currentRevenue);
+  }
+
+  function countEligiblePlayersForItem(itemKey, remainingRequest, remainingCapacity) {
+    if (remainingCapacity[itemKey] <= 0) return 0;
+    return remainingRequest.filter(request => request[itemKey] > 0).length;
+  }
+
+  function improveByTransfers(allocations, currentRevenue) {
+    let changed = true;
+    let guard = 0;
+
+    while (changed && guard < 10000) {
+      changed = false;
+      guard += 1;
+
+      const oldScore = balanceScore(currentRevenue);
+      let bestMove = null;
+
+      for (let from = 0; from < allocations.length; from++) {
+        for (let to = 0; to < allocations.length; to++) {
+          if (from === to || currentRevenue[from] <= currentRevenue[to]) continue;
+
+          for (const item of items) {
+            if ((allocations[from].allocated[item.key] || 0) <= 0) continue;
+            if ((allocations[to].allocated[item.key] || 0) >= (allocations[to].quantities[item.key] || 0)) continue;
+
+            const candidateRevenue = [...currentRevenue];
+            candidateRevenue[from] -= item.price;
+            candidateRevenue[to] += item.price;
+            const candidateScore = balanceScore(candidateRevenue);
+
+            if (isBetterScore(candidateScore, oldScore) && (!bestMove || isBetterScore(candidateScore, bestMove.score))) {
+              bestMove = { from, to, item, score: candidateScore, revenue: candidateRevenue };
+            }
           }
-
-          const candidateIsBetter =
-            candidate.improvement > best.improvement ||
-            (candidate.improvement === best.improvement && candidate.deficit > best.deficit) ||
-            (candidate.improvement === best.improvement && candidate.deficit === best.deficit && candidate.harm < best.harm) ||
-            (candidate.improvement === best.improvement && candidate.deficit === best.deficit && candidate.harm === best.harm && candidate.item.price > best.item.price);
-
-          if (candidateIsBetter) best = candidate;
         }
       }
 
-      if (!best) break;
-
-      allocations[best.playerIndex].allocated[best.item.key] += 1;
-      currentRevenue[best.playerIndex] += best.item.price;
-      remainingRequest[best.playerIndex][best.item.key] -= 1;
-      remainingCapacity[best.item.key] -= 1;
-      remainingUnits -= 1;
+      if (bestMove) {
+        allocations[bestMove.from].allocated[bestMove.item.key] -= 1;
+        allocations[bestMove.to].allocated[bestMove.item.key] += 1;
+        currentRevenue.splice(0, currentRevenue.length, ...bestMove.revenue);
+        changed = true;
+      }
     }
   }
 
-  function exportJson() {
-    const payload = { version: 1, exportedAt: new Date().toISOString(), items, players };
+  function balanceScore(revenues) {
+    const sorted = [...revenues].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+    return {
+      range: Math.max(...revenues) - Math.min(...revenues),
+      absoluteDeviation: revenues.reduce((sum, value) => sum + Math.abs(value - median), 0),
+      maxRevenue: Math.max(...revenues),
+    };
+  }
+
+  function isBetterScore(a, b) {
+    if (a.range !== b.range) return a.range < b.range;
+    if (a.absoluteDeviation !== b.absoluteDeviation) return a.absoluteDeviation < b.absoluteDeviation;
+    return a.maxRevenue < b.maxRevenue;
+  }
+
+  function exportJson() {OString(), items, players };
     document.getElementById('jsonOutput').value = JSON.stringify(payload, null, 2);
   }
 
