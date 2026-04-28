@@ -233,8 +233,9 @@
     const totalRequestedValue = allocations.reduce((sum, p) => sum + p.requestedValue, 0);
     const totalDeliverableValue = itemSummaries.reduce((sum, s) => sum + (s.deliverableQuantity * s.item.price), 0);
 
-    allocations.forEach(p => {
-      p.targetValue = totalRequestedValue > 0 ? totalDeliverableValue * (p.requestedValue / totalRequestedValue) : 0;
+    const fairTargets = computeEqualFairTargets(allocations, totalDeliverableValue);
+    allocations.forEach((p, index) => {
+      p.targetValue = fairTargets[index];
     });
 
     allocateByClosestValue(allocations, itemSummaries);
@@ -252,7 +253,7 @@
 
     document.getElementById('result').innerHTML = `
       ${itemSummaries.some(s => s.limited)
-        ? '<div class="warning">Unele cereri depășesc capacitatea. Aplicația a împărțit livrarea după valoarea în bani, cât mai aproape de ponderea valorică a fiecărui jucător.</div>'
+        ? '<div class="warning">Unele cereri depășesc capacitatea. Aplicația a împărțit livrarea după valoarea în bani, cât mai egal între jucători. Dacă un jucător nu poate atinge partea egală, diferența se redistribuie către ceilalți.</div>'
         : '<div class="ok">Toate cererile încap în capacitatea disponibilă.</div>'}
 
       <h2 style="margin-top:18px">Alocare pe jucător</h2>
@@ -298,6 +299,37 @@
         </tbody>
       </table>
     `;
+  }
+
+  function computeEqualFairTargets(allocations, totalDeliverableValue) {
+    const targets = Array(allocations.length).fill(0);
+    const remainingPlayers = new Set(allocations.map((_, index) => index));
+    let remainingValue = totalDeliverableValue;
+
+    while (remainingPlayers.size > 0) {
+      const equalShare = remainingValue / remainingPlayers.size;
+      let cappedAnyPlayer = false;
+
+      for (const index of Array.from(remainingPlayers)) {
+        const maxPlayerValue = allocations[index].requestedValue;
+
+        if (maxPlayerValue <= equalShare) {
+          targets[index] = maxPlayerValue;
+          remainingValue -= maxPlayerValue;
+          remainingPlayers.delete(index);
+          cappedAnyPlayer = true;
+        }
+      }
+
+      if (!cappedAnyPlayer) {
+        for (const index of remainingPlayers) {
+          targets[index] = equalShare;
+        }
+        break;
+      }
+    }
+
+    return targets;
   }
 
   function allocateByClosestValue(allocations, itemSummaries) {
