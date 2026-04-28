@@ -356,9 +356,15 @@
     }
 
     bestRevenue.splice(0, bestRevenue.length, ...allocations.map(p => items.reduce((sum, item) => sum + ((p.allocated[item.key] || 0) * item.price), 0)));
-    improveByTransfers(allocations, bestRevenue);
-    improveBySwaps(allocations, bestRevenue);
-    improveByComboSwaps(allocations, bestRevenue);
+    for (let i = 0; i < 20; i++) {
+      const before = JSON.stringify(allocations.map(p => p.allocated));
+      improveByPairTransfers(allocations, bestRevenue);
+      improveByTransfers(allocations, bestRevenue);
+      improveBySwaps(allocations, bestRevenue);
+      improveByComboSwaps(allocations, bestRevenue);
+      const after = JSON.stringify(allocations.map(p => p.allocated));
+      if (before === after) break;
+    }
 
     function runGreedyTrial(order) {
       const trialAllocations = allocations.map(() => Object.fromEntries(items.map(i => [i.key, 0])));
@@ -428,6 +434,59 @@
       sumTargetDiff: diffs.reduce((sum, value) => sum + value, 0),
       range: Math.max(...revenues) - Math.min(...revenues),
     };
+  }
+
+  function improveByPairTransfers(allocations, currentRevenue) {
+    let changed = true;
+    let guard = 0;
+
+    while (changed && guard < 50000) {
+      changed = false;
+      guard += 1;
+
+      let bestMove = null;
+
+      for (let from = 0; from < allocations.length; from++) {
+        for (let to = 0; to < allocations.length; to++) {
+          if (from === to) continue;
+          if (currentRevenue[from] <= allocations[from].targetValue) continue;
+          if (currentRevenue[to] >= allocations[to].targetValue) continue;
+
+          for (const item of items) {
+            if ((allocations[from].allocated[item.key] || 0) <= 0) continue;
+            if ((allocations[to].allocated[item.key] || 0) >= (allocations[to].quantities[item.key] || 0)) continue;
+
+            const beforePairDiff = Math.abs(currentRevenue[from] - allocations[from].targetValue)
+              + Math.abs(currentRevenue[to] - allocations[to].targetValue);
+            const afterFrom = currentRevenue[from] - item.price;
+            const afterTo = currentRevenue[to] + item.price;
+            const afterPairDiff = Math.abs(afterFrom - allocations[from].targetValue)
+              + Math.abs(afterTo - allocations[to].targetValue);
+
+            if (afterPairDiff >= beforePairDiff) continue;
+
+            const improvement = beforePairDiff - afterPairDiff;
+            const candidateRevenue = [...currentRevenue];
+            candidateRevenue[from] = afterFrom;
+            candidateRevenue[to] = afterTo;
+            const candidateScore = targetBalanceScore(candidateRevenue, allocations);
+
+            if (!bestMove
+              || improvement > bestMove.improvement
+              || (improvement === bestMove.improvement && isBetterScore(candidateScore, bestMove.score))) {
+              bestMove = { from, to, item, improvement, score: candidateScore, revenue: candidateRevenue };
+            }
+          }
+        }
+      }
+
+      if (bestMove) {
+        allocations[bestMove.from].allocated[bestMove.item.key] -= 1;
+        allocations[bestMove.to].allocated[bestMove.item.key] += 1;
+        currentRevenue.splice(0, currentRevenue.length, ...bestMove.revenue);
+        changed = true;
+      }
+    }
   }
 
   function improveByTransfers(allocations, currentRevenue) {
