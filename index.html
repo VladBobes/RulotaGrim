@@ -6,23 +6,58 @@
   <title>Calculator inventar și împărțire venituri</title>
   <style>
     :root {
+      --navy: #0f172a;
+      --navy-2: #1e293b;
+      --blue: #2563eb;
+      --blue-soft: #dbeafe;
+      --ink: #0f172a;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      --bg: #eef2f7;
+      --card: #ffffff;
+      --ok: #047857;
+      --ok-bg: #ecfdf5;
+      --warn: #c2410c;
+      --warn-bg: #fff7ed;
+      --danger: #b42318;
+      --danger-bg: #fff1f2;
+      --shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+      --radius: 18px;
       font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      color: #172033;
-      background: #f5f7fb;
+      color: var(--ink);
+      background: var(--bg);
     }
     * { box-sizing: border-box; }
-    body { margin: 0; padding: 24px; }
-    .app { max-width: 1180px; margin: 0 auto; }
-    h1 { margin: 0 0 8px; font-size: 28px; }
+    body { margin: 0; padding: 0 0 48px; background: var(--bg); }
+    .topbar {
+      background: linear-gradient(180deg, #0f172a 0%, #162033 100%);
+      color: white;
+      padding: 28px 24px 22px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    .topbar-inner, .app { max-width: 1180px; margin: 0 auto; }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: #93c5fd;
+      margin-bottom: 8px;
+    }
+    h1 { margin: 0 0 8px; font-size: 30px; letter-spacing: -.03em; }
     h2 { margin: 0 0 14px; font-size: 18px; }
-    p { color: #5b6475; }
+    .lede { margin: 0; color: #cbd5e1; max-width: 720px; line-height: 1.5; }
+    .app { padding: 24px 24px 0; }
     .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; }
     .card {
-      background: white;
-      border: 1px solid #e4e8f0;
-      border-radius: 18px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
       padding: 18px;
-      box-shadow: 0 10px 24px rgba(20, 32, 55, 0.06);
+      box-shadow: var(--shadow);
     }
     .span-4 { grid-column: span 4; }
     .span-8 { grid-column: span 8; }
@@ -36,37 +71,176 @@
       font: inherit;
       background: white;
     }
+    input:focus, select:focus, textarea:focus {
+      outline: 2px solid #bfdbfe;
+      border-color: var(--blue);
+    }
     button {
       cursor: pointer;
       border: 0;
-      background: #1f6feb;
+      background: var(--blue);
       color: white;
       font-weight: 800;
       margin-top: 12px;
     }
+    button:hover { filter: brightness(1.05); }
     button.secondary { background: #eef3ff; color: #1f4fbf; }
-    button.danger { background: #fff0f0; color: #b42318; }
+    button.danger { background: var(--danger-bg); color: var(--danger); }
     table { width: 100%; border-collapse: collapse; overflow: hidden; }
     th, td { border-bottom: 1px solid #edf0f6; padding: 10px; text-align: left; vertical-align: top; }
     th { color: #44506a; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+    tbody tr:hover { background: #f8fafc; }
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .items { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-    .pill { display: inline-flex; gap: 6px; align-items: center; background: #f1f5ff; color: #21428f; padding: 4px 8px; border-radius: 999px; margin: 2px; font-size: 12px; }
-    .muted { color: #697386; font-size: 13px; }
-    .warning { background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; padding: 10px 12px; border-radius: 12px; }
-    .ok { background: #ecfdf3; border: 1px solid #bbf7d0; color: #166534; padding: 10px 12px; border-radius: 12px; }
+    .pill {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      background: #f1f5ff;
+      color: #21428f;
+      padding: 4px 8px;
+      border-radius: 999px;
+      margin: 2px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .muted { color: var(--muted); font-size: 13px; }
+    .warning { background: var(--warn-bg); border: 1px solid #fed7aa; color: var(--warn); padding: 10px 12px; border-radius: 12px; }
+    .ok { background: var(--ok-bg); border: 1px solid #bbf7d0; color: var(--ok); padding: 10px 12px; border-radius: 12px; }
     .actions { display: flex; gap: 8px; }
     .actions button { margin-top: 0; }
-    @media (max-width: 900px) { .span-4, .span-8 { grid-column: span 12; } .items { grid-template-columns: 1fr; } }
+    .trailer-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      margin: 16px 0 18px;
+    }
+    .trailer-card {
+      margin: 0;
+      width: 100%;
+      text-align: left;
+      background: #f8fafc;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 14px 14px 12px;
+      box-shadow: none;
+      min-height: 108px;
+    }
+    .trailer-card:hover { border-color: #93c5fd; background: #f8fbff; }
+    .trailer-card.active {
+      background: var(--blue);
+      color: white;
+      border-color: var(--blue);
+      box-shadow: 0 10px 24px rgba(37, 99, 235, 0.28);
+    }
+    .trailer-card .kicker {
+      display: block;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      opacity: .65;
+      margin-bottom: 4px;
+    }
+    .trailer-card .name { display: block; font-size: 20px; font-weight: 800; letter-spacing: -.02em; }
+    .trailer-card .meta { display: block; margin-top: 8px; font-size: 12px; font-weight: 600; line-height: 1.45; opacity: .82; }
+    .capacity-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 10px;
+    }
+    .cap-box {
+      border: 1px solid var(--line);
+      background: #f8fafc;
+      border-radius: 14px;
+      padding: 12px;
+    }
+    .cap-box label { margin: 0 0 8px; }
+    .cap-box .value { font-size: 22px; font-weight: 800; letter-spacing: -.03em; }
+    .cap-box .usage { margin-top: 8px; }
+    .bar {
+      height: 7px;
+      background: #e2e8f0;
+      border-radius: 999px;
+      overflow: hidden;
+      margin-top: 6px;
+    }
+    .bar > span {
+      display: block;
+      height: 100%;
+      background: var(--blue);
+      border-radius: 999px;
+    }
+    .bar.over > span { background: #ea580c; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--blue-soft);
+      color: #1e40af;
+      font-size: 12px;
+      font-weight: 800;
+      padding: 5px 10px;
+      border-radius: 999px;
+    }
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .section-head h2 { margin: 0; }
+    .player-form .items { margin-top: 6px; }
+    .qty-field {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 10px;
+      background: #f8fafc;
+    }
+    .qty-field label { margin-top: 0; }
+    .table-wrap { overflow-x: auto; }
+    .result-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    @media (max-width: 1100px) {
+      .trailer-grid, .capacity-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 900px) {
+      .span-4, .span-8 { grid-column: span 12; }
+      .items, .row { grid-template-columns: 1fr; }
+      .trailer-grid, .capacity-grid { grid-template-columns: repeat(2, 1fr); }
+      h1 { font-size: 24px; }
+    }
+    @media (max-width: 560px) {
+      .trailer-grid, .capacity-grid { grid-template-columns: 1fr; }
+      .section-head { flex-direction: column; }
+    }
   </style>
 </head>
 <body>
-  <div class="app">
-    <h1>Calculator inventar și împărțire venituri</h1>
-    <p>Aplicație statică pentru GitHub Pages pentru calculul livrărilor și împărțirea încasărilor din GTA V RageMP.</p>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="eyebrow">GTA V RageMP</div>
+      <h1>Calculator inventar și împărțire venituri</h1>
+      <p class="lede">Alege rulota, introdu cantitățile jucătorilor și calculează livrarea. Capacitățile maxime se schimbă automat după preset, iar la Custom le setezi tu.</p>
+    </div>
+  </header>
 
+  <div class="app">
     <div class="grid">
-      <section class="card span-4">
+      <section class="card span-12">
+        <div class="section-head">
+          <div>
+            <h2>Rulotă</h2>
+            <p class="muted" style="margin:0">Selectează un preset sau treci pe Custom ca să modifici fiecare cantitate maximă.</p>
+          </div>
+          <div id="activeTrailerBadge"></div>
+        </div>
+        <div class="trailer-grid" id="trailerGrid"></div>
+        <div id="capacityPanel"></div>
+      </section>
+
+      <section class="card span-4 player-form">
         <h2>Adaugă jucător</h2>
         <label>Nume</label>
         <input id="playerName" placeholder="Ex: Vlad" />
@@ -88,7 +262,12 @@
       </section>
 
       <section class="card span-12">
-        <h2>Rezultat calcul</h2>
+        <div class="section-head">
+          <div class="result-title">
+            <h2>Rezultat calcul</h2>
+            <div id="resultTrailerBadge"></div>
+          </div>
+        </div>
         <div id="result"></div>
       </section>
 
@@ -102,22 +281,124 @@
             <input type="file" accept="application/json" onchange="importJson(event)" />
           </label>
         </div>
-        <textarea id="jsonOutput" rows="6" placeholder="Aici apare exportul JSON"></textarea>
+        <textarea id="jsonOutput" rows="8" placeholder="Aici apare exportul JSON sau textul de livrare"></textarea>
       </section>
     </div>
   </div>
 
 <script>
   const items = [
-    { key: 'plicCocaina', name: 'Plic cocaină', capacity: 750, price: 13600 },
-    { key: 'joint', name: 'Joint', capacity: 1000, price: 7500 },
-    { key: 'tigara', name: 'Țigară', capacity: 1000, price: 4700 },
-    { key: 'redFire', name: 'Red Fire', capacity: 500, price: 5400 },
-    { key: 'greenHaze', name: 'Green Haze', capacity: 500, price: 8600 },
-    { key: 'blueCurrent', name: 'Blue Current', capacity: 500, price: 12600 },
+    { key: 'plicCocaina', name: 'Plic cocaină', capacity: 2000, price: 13600 },
+    { key: 'joint', name: 'Joint', capacity: 2000, price: 7500 },
+    { key: 'tigara', name: 'Țigară', capacity: 2000, price: 4700 },
+    { key: 'redFire', name: 'Red Fire', capacity: 1000, price: 5400 },
+    { key: 'greenHaze', name: 'Green Haze', capacity: 1000, price: 8600 },
+    { key: 'blueCurrent', name: 'Blue Current', capacity: 1000, price: 12600 },
+  ];
+
+  const GROVE_CAPS = {
+    plicCocaina: 2000,
+    joint: 2000,
+    tigara: 2000,
+    blueCurrent: 1000,
+    greenHaze: 1000,
+    redFire: 1000,
+  };
+
+  const TRAILER_PRESETS = [
+    {
+      id: 'grove',
+      name: 'Grove',
+      kicker: 'Preset',
+      summary: '2.000 coca · 2.000 joint · 2.000 țigări',
+      capacities: { ...GROVE_CAPS },
+    },
+    {
+      id: 'vespucci',
+      name: 'Vespucci',
+      kicker: 'Preset',
+      summary: '2.000 coca · 2.000 joint · 2.000 țigări',
+      capacities: { ...GROVE_CAPS },
+    },
+    {
+      id: 'mirror',
+      name: 'Mirror',
+      kicker: 'Preset',
+      summary: '1.600 coca · 2.000 joint · 2.000 țigări',
+      capacities: {
+        plicCocaina: 1600,
+        joint: 2000,
+        tigara: 2000,
+        blueCurrent: 1000,
+        greenHaze: 1000,
+        redFire: 1000,
+      },
+    },
+    {
+      id: 'sandy',
+      name: 'Sandy',
+      kicker: 'Preset',
+      summary: '1.000 coca · 1.600 joint · 1.600 țigări',
+      capacities: {
+        plicCocaina: 1000,
+        joint: 1600,
+        tigara: 1600,
+        blueCurrent: 600,
+        greenHaze: 600,
+        redFire: 600,
+      },
+    },
+    {
+      id: 'custom',
+      name: 'Custom',
+      kicker: 'Manual',
+      summary: 'Fiecare cantitate o setezi tu',
+      capacities: null,
+    },
   ];
 
   let players = JSON.parse(localStorage.getItem('players') || '[]');
+  let selectedTrailerId = localStorage.getItem('selectedTrailerId') || 'grove';
+  if (!TRAILER_PRESETS.some(t => t.id === selectedTrailerId)) selectedTrailerId = 'grove';
+  let customCapacities = loadCustomCapacities();
+  let customCalcTimer = null;
+
+  function loadCustomCapacities() {
+    try {
+      const saved = JSON.parse(localStorage.getItem('customCapacities') || 'null');
+      if (saved && typeof saved === 'object') {
+        return { ...GROVE_CAPS, ...saved };
+      }
+    } catch (e) {}
+    return { ...GROVE_CAPS };
+  }
+
+  function getSelectedTrailer() {
+    return TRAILER_PRESETS.find(t => t.id === selectedTrailerId) || TRAILER_PRESETS[0];
+  }
+
+  function currentCapacities() {
+    const trailer = getSelectedTrailer();
+    if (trailer.id === 'custom') return { ...customCapacities };
+    return { ...trailer.capacities };
+  }
+
+  function applyTrailerCapacities() {
+    const caps = currentCapacities();
+    items.forEach(item => {
+      const value = Number(caps[item.key]);
+      item.capacity = Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
+    });
+  }
+
+  function persistSettings() {
+    localStorage.setItem('selectedTrailerId', selectedTrailerId);
+    localStorage.setItem('customCapacities', JSON.stringify(customCapacities));
+  }
+
+  function qty(value) {
+    return new Intl.NumberFormat('ro-RO').format(value || 0);
+  }
 
   function money(value) {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
@@ -127,15 +408,115 @@
     localStorage.setItem('players', JSON.stringify(players));
   }
 
+  function requestedTotals() {
+    return Object.fromEntries(items.map(item => [
+      item.key,
+      players.reduce((sum, p) => sum + (p.quantities[item.key] || 0), 0),
+    ]));
+  }
+
+  function selectTrailer(id) {
+    selectedTrailerId = id;
+    persistSettings();
+    applyTrailerCapacities();
+    renderTrailer();
+    renderInputs();
+    calculate();
+  }
+
+  function updateCustomCapacity(key, rawValue) {
+    const value = Number(rawValue);
+    customCapacities[key] = Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
+    persistSettings();
+    applyTrailerCapacities();
+    updateInputCaps();
+    updateCapacityUsage();
+    clearTimeout(customCalcTimer);
+    customCalcTimer = setTimeout(calculate, 200);
+  }
+
+  function updateInputCaps() {
+    items.forEach(item => {
+      const hint = document.querySelector(`#qty_${item.key}`)?.parentElement?.querySelector('.muted');
+      if (hint) hint.textContent = `Cap: ${qty(item.capacity)}, preț: ${money(item.price)}`;
+    });
+  }
+
+  function updateCapacityUsage() {
+    const totals = requestedTotals();
+    items.forEach(item => {
+      const box = document.getElementById(`capbox_${item.key}`);
+      if (!box) return;
+      const requested = totals[item.key] || 0;
+      const percent = item.capacity > 0 ? Math.min(100, Math.round((requested / item.capacity) * 100)) : (requested > 0 ? 100 : 0);
+      const over = requested > item.capacity;
+      const usage = box.querySelector('.usage');
+      const bar = box.querySelector('.bar');
+      const fill = bar && bar.querySelector('span');
+      const value = box.querySelector('.value');
+      if (usage) usage.textContent = `${qty(requested)} cerute · ${over ? 'peste cap' : 'în cap'}`;
+      if (bar) bar.classList.toggle('over', over);
+      if (fill) fill.style.width = `${percent}%`;
+      if (value) value.textContent = qty(item.capacity);
+    });
+  }
+
+  function renderTrailer() {
+    const trailer = getSelectedTrailer();
+    const totals = requestedTotals();
+    const badgeHtml = `<span class="badge">${escapeHtml(trailer.name)}</span>`;
+    document.getElementById('activeTrailerBadge').innerHTML = badgeHtml;
+    document.getElementById('resultTrailerBadge').innerHTML = badgeHtml;
+
+    document.getElementById('trailerGrid').innerHTML = TRAILER_PRESETS.map(preset => `
+      <button type="button" class="trailer-card ${preset.id === trailer.id ? 'active' : ''}" onclick="selectTrailer('${preset.id}')" aria-pressed="${preset.id === trailer.id}">
+        <span class="kicker">${escapeHtml(preset.kicker)}</span>
+        <span class="name">${escapeHtml(preset.name)}</span>
+        <span class="meta">${escapeHtml(preset.summary)}</span>
+      </button>
+    `).join('');
+
+    const isCustom = trailer.id === 'custom';
+    document.getElementById('capacityPanel').innerHTML = `
+      <div class="capacity-grid">
+        ${items.map(item => {
+          const requested = totals[item.key] || 0;
+          const percent = item.capacity > 0 ? Math.min(100, Math.round((requested / item.capacity) * 100)) : (requested > 0 ? 100 : 0);
+          const over = requested > item.capacity;
+          return `
+            <div class="cap-box" id="capbox_${item.key}">
+              <label for="cap_${item.key}">${escapeHtml(item.name)}</label>
+              ${isCustom
+                ? `<input id="cap_${item.key}" type="number" min="0" step="1" value="${item.capacity}" oninput="updateCustomCapacity('${item.key}', this.value)" />`
+                : `<div class="value">${qty(item.capacity)}</div>`}
+              <div class="usage muted">${qty(requested)} cerute · ${over ? 'peste cap' : 'în cap'}</div>
+              <div class="bar ${over ? 'over' : ''}"><span style="width:${percent}%"></span></div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
   function renderInputs() {
+    const previous = {};
+    items.forEach(item => {
+      const el = document.getElementById(`qty_${item.key}`);
+      if (el) previous[item.key] = el.value;
+    });
+
     const container = document.getElementById('itemInputs');
     container.innerHTML = items.map(item => `
-      <div>
+      <div class="qty-field">
         <label>${item.name}</label>
         <input id="qty_${item.key}" type="number" min="0" step="1" placeholder="0" />
-        <div class="muted">Cap: ${item.capacity}, preț: ${money(item.price)}</div>
+        <div class="muted">Cap: ${qty(item.capacity)}, preț: ${money(item.price)}</div>
       </div>
     `).join('');
+
+    items.forEach(item => {
+      if (previous[item.key]) document.getElementById(`qty_${item.key}`).value = previous[item.key];
+    });
   }
 
   function renderPlayers() {
@@ -146,19 +527,21 @@
     }
 
     el.innerHTML = `
-      <table>
-        <thead><tr><th>Nume</th><th>CNP/ID</th><th>Cantități introduse</th><th></th></tr></thead>
-        <tbody>
-          ${players.map((p, idx) => `
-            <tr>
-              <td>${escapeHtml(p.name)}</td>
-              <td>${escapeHtml(p.cnp)}</td>
-              <td>${items.map(i => p.quantities[i.key] ? `<span class="pill">${i.name}: ${p.quantities[i.key]}</span>` : '').join('')}</td>
-              <td><button class="danger" onclick="removePlayer(${idx})">Șterge</button></td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Nume</th><th>CNP/ID</th><th>Cantități introduse</th><th></th></tr></thead>
+          <tbody>
+            ${players.map((p, idx) => `
+              <tr>
+                <td>${escapeHtml(p.name)}</td>
+                <td>${escapeHtml(p.cnp)}</td>
+                <td>${items.map(i => p.quantities[i.key] ? `<span class="pill">${i.name}: ${qty(p.quantities[i.key])}</span>` : '').join('')}</td>
+                <td><button class="danger" onclick="removePlayer(${idx})">Șterge</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
     `;
   }
 
@@ -190,6 +573,7 @@
     document.getElementById('playerCnp').value = '';
     items.forEach(item => document.getElementById(`qty_${item.key}`).value = '');
     renderPlayers();
+    renderTrailer();
     calculate();
   }
 
@@ -197,6 +581,7 @@
     players.splice(index, 1);
     save();
     renderPlayers();
+    renderTrailer();
     calculate();
   }
 
@@ -205,12 +590,15 @@
     players = [];
     save();
     renderPlayers();
+    renderTrailer();
     document.getElementById('result').innerHTML = '';
+    document.getElementById('jsonOutput').value = '';
   }
 
   function calculate() {
     if (!players.length) {
       document.getElementById('result').innerHTML = '<p class="muted">Adaugă jucători pentru calcul.</p>';
+      updateCapacityUsage();
       return;
     }
 
@@ -255,57 +643,63 @@
     });
 
     const grandTotal = allocations.reduce((sum, p) => sum + p.revenue, 0);
+    const trailer = getSelectedTrailer();
 
     document.getElementById('result').innerHTML = `
       ${itemSummaries.some(s => s.limited)
-        ? '<div class="warning">Unele cantități depășesc capacitatea rulotei. Aplicația încearcă să echilibreze valoarea în bani între jucători, respectând ce poate livra fiecare.</div>'
-        : '<div class="ok">Toate cantitățile încap în capacitatea disponibilă.</div>'}
+        ? `<div class="warning">Unele cantități depășesc capacitatea rulotei ${escapeHtml(trailer.name)}. Aplicația încearcă să echilibreze valoarea în bani între jucători, respectând ce poate livra fiecare.</div>`
+        : `<div class="ok">Toate cantitățile încap în capacitatea rulotei ${escapeHtml(trailer.name)}.</div>`}
 
       <h2 style="margin-top:18px">Alocare pe jucător</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Jucător</th>
-            ${items.map(i => `<th>${i.name}</th>`).join('')}
-            <th>Maxim posibil</th>
-            <th>Minim forțat</th>
-            <th>Țintă corectă</th>
-            <th>Total primit</th>
-            <th>Diferență</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${allocations.map(p => `
+      <div class="table-wrap">
+        <table>
+          <thead>
             <tr>
-              <td>${escapeHtml(p.name)}<br><span class="muted">${escapeHtml(p.cnp)}</span></td>
-              ${items.map(i => `<td>${p.allocated[i.key] || 0}</td>`).join('')}
-              <td>${money(p.maxValue)}</td>
-              <td>${money(p.minimumForcedValue || 0)}</td>
-              <td>${money(p.targetValue)}</td>
-              <td><strong>${money(p.revenue)}</strong></td>
-              <td>${money(p.revenue - p.targetValue)}</td>
+              <th>Jucător</th>
+              ${items.map(i => `<th>${i.name}</th>`).join('')}
+              <th>Maxim posibil</th>
+              <th>Minim forțat</th>
+              <th>Țintă corectă</th>
+              <th>Total primit</th>
+              <th>Diferență</th>
             </tr>
-          `).join('')}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            ${allocations.map(p => `
+              <tr>
+                <td>${escapeHtml(p.name)}<br><span class="muted">${escapeHtml(p.cnp)}</span></td>
+                ${items.map(i => `<td>${qty(p.allocated[i.key] || 0)}</td>`).join('')}
+                <td>${money(p.maxValue)}</td>
+                <td>${money(p.minimumForcedValue || 0)}</td>
+                <td>${money(p.targetValue)}</td>
+                <td><strong>${money(p.revenue)}</strong></td>
+                <td>${money(p.revenue - p.targetValue)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
 
       <h2 style="margin-top:18px">Sumar pe drog</h2>
-      <table>
-        <thead><tr><th>Drog</th><th>Cerut</th><th>Alocat</th><th>Capacitate</th><th>Venit total</th></tr></thead>
-        <tbody>
-          ${itemSummaries.map(s => `
-            <tr>
-              <td>${s.item.name}</td>
-              <td>${s.totalRequested}</td>
-              <td>${s.finalAllocated}</td>
-              <td>${s.capacity}</td>
-              <td>${money(s.totalRevenue)}</td>
-            </tr>
-          `).join('')}
-          <tr><td colspan="4"><strong>Total general</strong></td><td><strong>${money(grandTotal)}</strong></td></tr>
-        </tbody>
-      </table>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Drog</th><th>Cerut</th><th>Alocat</th><th>Capacitate</th><th>Venit total</th></tr></thead>
+          <tbody>
+            ${itemSummaries.map(s => `
+              <tr>
+                <td>${s.item.name}</td>
+                <td>${qty(s.totalRequested)}</td>
+                <td>${qty(s.finalAllocated)}</td>
+                <td>${qty(s.capacity)}</td>
+                <td>${money(s.totalRevenue)}</td>
+              </tr>
+            `).join('')}
+            <tr><td colspan="4"><strong>Total general</strong></td><td><strong>${money(grandTotal)}</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
     `;
+    updateCapacityUsage();
   }
 
   function computeMinimumForcedValues(allocations, itemSummaries) {
@@ -695,7 +1089,14 @@
   }
 
   function exportJson() {
-    const payload = { version: 1, exportedAt: new Date().toISOString(), items, players };
+    const payload = {
+      version: 2,
+      exportedAt: new Date().toISOString(),
+      selectedTrailerId,
+      customCapacities,
+      items,
+      players,
+    };
     document.getElementById('jsonOutput').value = JSON.stringify(payload, null, 2);
   }
 
@@ -706,6 +1107,8 @@
     }
 
     const allocations = getCurrentAllocationsForExport();
+    const trailer = getSelectedTrailer();
+    const header = trailer.id !== 'custom' ? `Rulotă: ${trailer.name}\n\n` : '';
 
     const text = allocations.map(player => {
       const lines = [`${player.name} | ${player.cnp}`];
@@ -718,7 +1121,7 @@
       return lines.join('\n');
     }).join('\n\n');
 
-    document.getElementById('jsonOutput').value = text;
+    document.getElementById('jsonOutput').value = header + text;
   }
 
   function getCurrentAllocationsForExport() {
@@ -764,7 +1167,17 @@
         const payload = JSON.parse(reader.result);
         if (!Array.isArray(payload.players)) throw new Error('JSON invalid');
         players = payload.players;
+        if (payload.selectedTrailerId && TRAILER_PRESETS.some(t => t.id === payload.selectedTrailerId)) {
+          selectedTrailerId = payload.selectedTrailerId;
+        }
+        if (payload.customCapacities && typeof payload.customCapacities === 'object') {
+          customCapacities = { ...GROVE_CAPS, ...payload.customCapacities };
+        }
         save();
+        persistSettings();
+        applyTrailerCapacities();
+        renderTrailer();
+        renderInputs();
         renderPlayers();
         calculate();
       } catch (e) {
@@ -783,6 +1196,8 @@
       .replaceAll("'", '&#039;');
   }
 
+  applyTrailerCapacities();
+  renderTrailer();
   renderInputs();
   renderPlayers();
   calculate();
