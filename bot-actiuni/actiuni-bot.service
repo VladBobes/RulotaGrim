@@ -1,5 +1,5 @@
 [Unit]
-Description=Rulota Grim bot acțiuni
+Description=actiuni-bot
 After=network-online.target
 Wants=network-online.target
 

@@ -46,12 +46,20 @@ git pull origin main
 cd /home/ubuntu/RulotaGrim/bot-actiuni
 npm install
 node register-commands.js
-sudo cp /home/ubuntu/RulotaGrim/bot-actiuni/rulota-actiuni.service /etc/systemd/system/rulota-actiuni.service
+cd /home/ubuntu/RulotaGrim
+sudo cp bot-actiuni/actiuni-bot.service /etc/systemd/system/actiuni-bot.service
 sudo systemctl daemon-reload
-sudo systemctl enable --now rulota-actiuni
-sudo systemctl status rulota-actiuni
+sudo systemctl enable --now actiuni-bot
+sudo systemctl status actiuni-bot
 ```
 
-Loguri: `journalctl -u rulota-actiuni -f`.
+Dacă `rulota-actiuni` era deja instalat pe VM, oprește și dezactivează unitatea veche ca să nu ruleze două procese:
 
-Botul de livrare (`rulota-bot`) rămâne neschimbat. Pornește doar unitatea nouă `rulota-actiuni`; nu reporni `rulota-bot` decât dacă actualizezi și acel bot.
+```bash
+sudo systemctl disable --now rulota-actiuni
+sudo rm -f /etc/systemd/system/rulota-actiuni.service
+```
+
+Loguri: `journalctl -u actiuni-bot -f`.
+
+Botul de livrare (`rulota-bot`) rămâne neschimbat. Pornește doar unitatea nouă `actiuni-bot`; nu reporni `rulota-bot` decât dacă actualizezi și acel bot.
