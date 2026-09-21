@@ -1,3 +1,6 @@
 bot/.env
 bot/data/
 bot/node_modules/
+bot-actiuni/.env
+bot-actiuni/data/
+bot-actiuni/node_modules/

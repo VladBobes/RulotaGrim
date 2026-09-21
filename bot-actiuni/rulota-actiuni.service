@@ -1,0 +1,16 @@
+[Unit]
+Description=Rulota Grim bot acțiuni
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/RulotaGrim/bot-actiuni
+EnvironmentFile=/home/ubuntu/RulotaGrim/bot-actiuni/.env
+ExecStart=/usr/bin/node /home/ubuntu/RulotaGrim/bot-actiuni/index.js
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
