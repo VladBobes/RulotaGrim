@@ -1,0 +1,17 @@
+{
+  "name": "rulota-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bot Discord pentru calculatorul de predare Rulota Grim",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "register": "node register-commands.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "discord.js": "^14.21.0"
+  }
+}
