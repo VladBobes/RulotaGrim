@@ -168,7 +168,7 @@ client.on(Events.InteractionCreate, async interaction => {
       await interaction.reply({ content: gate.message, ephemeral: true });
       return;
     }
-    if (interaction.commandName === 'predare') await handlePredare(interaction);
+    if (interaction.commandName === 'livrare') await handlePredare(interaction);
     else if (interaction.commandName === 'calculeaza') await handleCalculeaza(interaction);
     else if (interaction.commandName === 'lista') await handleLista(interaction);
     else if (interaction.commandName === 'reset') await handleReset(interaction);

@@ -1,11 +1,11 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { quantityFields } = require('./fields');
 
-const predare = new SlashCommandBuilder()
-  .setName('predare')
+const livrare = new SlashCommandBuilder()
+  .setName('livrare')
   .setDescription('Înregistrează cantitățile tale pentru predare');
 
-predare.addStringOption(option =>
+livrare.addStringOption(option =>
   option
     .setName('cnp')
     .setDescription('CNP / ID intern, 1–5 cifre')
@@ -15,7 +15,7 @@ predare.addStringOption(option =>
 );
 
 for (const field of quantityFields) {
-  predare.addIntegerOption(option =>
+  livrare.addIntegerOption(option =>
     option
       .setName(field.option)
       .setDescription(field.label)
@@ -26,11 +26,11 @@ for (const field of quantityFields) {
 
 const calculeaza = new SlashCommandBuilder()
   .setName('calculeaza')
-  .setDescription('Calculează livrarea pe rulota aleasă')
+  .setDescription('Alege rulota pentru livrarea următoare și calculează exportul')
   .addStringOption(option =>
     option
       .setName('rulota')
-      .setDescription('Rulota folosită la predare')
+      .setDescription('Rulota folosită la livrarea următoare (Grove, Custom, etc.)')
       .setRequired(true)
       .addChoices(
         { name: 'Grove', value: 'grove' },
@@ -59,6 +59,6 @@ const reset = new SlashCommandBuilder()
   .setName('reset')
   .setDescription('Șterge predările pentru livrarea următoare');
 
-const commands = [predare, calculeaza, lista, reset];
+const commands = [livrare, calculeaza, lista, reset];
 
 module.exports = { commands };

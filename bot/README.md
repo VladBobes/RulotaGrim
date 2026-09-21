@@ -4,8 +4,8 @@ Pagina de pe GitHub Pages rămâne calculatorul static și merge în paralel cu 
 
 Comenzi, pe server (dacă `DISCORD_GUILD_ID` este setat):
 
-- `/predare` — cantități și CNP (1–5 cifre). Numele vine din numele afișat pe Discord. O predare nouă de la același utilizator o înlocuiește pe cea veche.
-- `/calculeaza` — Grove, Vespucci, Mirror, Sandy sau Custom. La Custom, capacitățile lipsă pornesc de la valorile Grove.
+- `/livrare` — cantități și CNP (1–5 cifre). Numele vine din numele afișat pe Discord. O predare nouă de la același utilizator o înlocuiește pe cea veche. Folosește `PREDARE_ROLE_IDS` (neschimbat; nu există `LIVRARE_ROLE_IDS`).
+- `/calculeaza` — alege rulota pentru livrarea următoare (Grove, Vespucci, Mirror, Sandy sau Custom) și calculează exportul. La Custom, opțiunile `cap_*` lipsă pornesc de la valorile Grove.
 - `/lista` — predările curente.
 - `/reset` — golește predările pentru livrarea următoare.
 
@@ -38,7 +38,7 @@ cd /home/ubuntu/RulotaGrim
 cp bot/.env.example bot/.env
 ```
 
-`DISCORD_TOKEN`, `DISCORD_CLIENT_ID` și `DISCORD_GUILD_ID` (ID-ul serverului). Cu guild id setat, comenzile apar imediat pe acel server. `PREDARE_ROLE_IDS` limitează `/predare`, iar `STAFF_ROLE_IDS` limitează `/calculeaza`, `/lista` și `/reset` (ID-uri de rol, separate prin virgulă).
+`DISCORD_TOKEN`, `DISCORD_CLIENT_ID` și `DISCORD_GUILD_ID` (ID-ul serverului). Cu guild id setat, comenzile apar imediat pe acel server. `PREDARE_ROLE_IDS` (neschimbat) limitează `/livrare`, iar `STAFF_ROLE_IDS` limitează `/calculeaza`, `/lista` și `/reset` (ID-uri de rol, separate prin virgulă).
 
 6. Instalează dependențele și înregistrează comenzile:
 
@@ -58,5 +58,15 @@ sudo systemctl status rulota-bot
 ```
 
 `Restart=always` ține procesul pornit după reboot sau după o eroare. Loguri: `journalctl -u rulota-bot -f`.
+
+După un `git pull` pe VM, reînregistrează comenzile (Discord înlocuiește `/predare` cu `/livrare`) și repornește serviciul:
+
+```bash
+cd /home/ubuntu/RulotaGrim
+git pull origin main
+cd /home/ubuntu/RulotaGrim/bot
+node register-commands.js
+sudo systemctl restart rulota-bot
+```
 
 Pagina GitHub Pages nu trece prin acest VM. Rămâne site-ul static (`index.html` și `allocation.js`) și poate fi folosită în continuare fără bot.

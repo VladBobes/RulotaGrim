@@ -1,5 +1,5 @@
 const COMMAND_ROLE_ENV = {
-  predare: 'PREDARE_ROLE_IDS',
+  livrare: 'PREDARE_ROLE_IDS',
   calculeaza: 'STAFF_ROLE_IDS',
   lista: 'STAFF_ROLE_IDS',
   reset: 'STAFF_ROLE_IDS',

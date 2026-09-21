@@ -22,12 +22,12 @@ test('authorizeCommand folosește rolul potrivit și mesajele de refuz', () => {
     STAFF_ROLE_IDS: '999',
   };
   const member = { roles: ['111', '5'] };
-  assert.equal(authorizeCommand('predare', member, env).ok, true);
+  assert.equal(authorizeCommand('livrare', member, env).ok, true);
   assert.equal(authorizeCommand('calculeaza', member, env).code, 'missing');
   assert.equal(authorizeCommand('lista', member, env).message, 'Nu ai rolul necesar pentru comanda asta.');
   assert.equal(authorizeCommand('reset', { roles: ['999'] }, env).ok, true);
 
-  const empty = authorizeCommand('predare', member, {});
+  const empty = authorizeCommand('livrare', member, {});
   assert.equal(empty.ok, false);
   assert.equal(empty.code, 'unconfigured');
   assert.equal(empty.message, 'Lista de roluri nu este configurată pe bot.');
