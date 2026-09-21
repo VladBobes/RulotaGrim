@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { isValidCnp, items } = require('../allocation');
+const { cleanPlayerName } = require('./player-label');
 
 function createStore(filePath) {
   function read() {
@@ -38,8 +39,9 @@ function createStore(filePath) {
     }
     if (total === 0) return { ok: false, code: 'empty' };
 
-    const name = String(entry.name || '').trim();
-    if (!name) return { ok: false, code: 'name' };
+    const rawName = String(entry.name || '').trim();
+    if (!rawName) return { ok: false, code: 'name' };
+    const name = cleanPlayerName(rawName, cnp) || rawName;
     if (!entry.userId) return { ok: false, code: 'user' };
 
     const data = read();

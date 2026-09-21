@@ -4,6 +4,7 @@ const { loadEnv } = require('./env');
 const { createStore } = require('./store');
 const { quantityFields } = require('./fields');
 const { authorizeCommand } = require('./roles');
+const { cleanPlayerName, formatPlayerLabel } = require('./player-label');
 const {
   items,
   GROVE_CAPS,
@@ -96,7 +97,7 @@ async function sendText(interaction, text) {
 function formatList(submissions) {
   if (!submissions.length) return 'Nu există predări.';
   const blocks = submissions.map(entry => {
-    const lines = [`${entry.name} | ${entry.cnp}`];
+    const lines = [formatPlayerLabel(entry.name, entry.cnp)];
     items.forEach(item => {
       const quantity = entry.quantities[item.key] || 0;
       if (quantity > 0) lines.push(`${item.name}: ${quantity}`);
@@ -118,7 +119,7 @@ async function handlePredare(interaction) {
     return;
   }
   const verb = result.replaced ? 'Predarea a fost actualizată' : 'Predare salvată';
-  await interaction.reply(`${verb} pentru ${result.submission.name} | ${result.submission.cnp}.`);
+  await interaction.reply(`${verb} pentru ${formatPlayerLabel(result.submission.name, result.submission.cnp)}.`);
 }
 
 async function handleCalculeaza(interaction) {
@@ -138,7 +139,7 @@ async function handleCalculeaza(interaction) {
   await interaction.deferReply();
   const capacities = trailer.id === 'custom' ? readCustomCapacities(interaction) : { ...trailer.capacities };
   const players = submissions.map(entry => ({
-    name: entry.name,
+    name: cleanPlayerName(entry.name, entry.cnp) || entry.name,
     cnp: entry.cnp,
     quantities: entry.quantities,
   }));
