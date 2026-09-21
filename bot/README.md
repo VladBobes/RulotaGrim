@@ -38,7 +38,7 @@ cd /home/ubuntu/RulotaGrim
 cp bot/.env.example bot/.env
 ```
 
-`DISCORD_TOKEN`, `DISCORD_CLIENT_ID` și `DISCORD_GUILD_ID` (ID-ul serverului). Cu guild id setat, comenzile apar imediat pe acel server.
+`DISCORD_TOKEN`, `DISCORD_CLIENT_ID` și `DISCORD_GUILD_ID` (ID-ul serverului). Cu guild id setat, comenzile apar imediat pe acel server. `PREDARE_ROLE_IDS` limitează `/predare`, iar `STAFF_ROLE_IDS` limitează `/calculeaza`, `/lista` și `/reset` (ID-uri de rol, separate prin virgulă).
 
 6. Instalează dependențele și înregistrează comenzile:
 

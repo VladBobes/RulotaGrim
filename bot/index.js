@@ -3,6 +3,7 @@ const { Client, GatewayIntentBits, Events } = require('discord.js');
 const { loadEnv } = require('./env');
 const { createStore } = require('./store');
 const { quantityFields } = require('./fields');
+const { authorizeCommand } = require('./roles');
 const {
   items,
   GROVE_CAPS,
@@ -161,6 +162,11 @@ client.once(Events.ClientReady, readyClient => {
 client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isChatInputCommand()) return;
   try {
+    const gate = authorizeCommand(interaction.commandName, interaction.member);
+    if (!gate.ok) {
+      await interaction.reply({ content: gate.message, ephemeral: true });
+      return;
+    }
     if (interaction.commandName === 'predare') await handlePredare(interaction);
     else if (interaction.commandName === 'calculeaza') await handleCalculeaza(interaction);
     else if (interaction.commandName === 'lista') await handleLista(interaction);
