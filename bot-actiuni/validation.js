@@ -5,8 +5,8 @@ const ACTION_TYPES = [
   { name: 'Maldive', requiresLocation: false, requiresTitle: false },
   { name: 'Cayo', requiresLocation: false, requiresTitle: false },
   { name: 'Plimbare cu motoarele', requiresLocation: true, requiresTitle: false },
-  { name: 'Farm', requiresLocation: false, requiresTitle: false },
-  { name: 'Sedinta', requiresLocation: false, requiresTitle: false },
+  { name: 'Farm', requiresLocation: true, requiresTitle: false },
+  { name: 'Sedinta', requiresLocation: true, requiresTitle: false },
   { name: 'Custom', requiresLocation: true, requiresTitle: true },
 ];
 

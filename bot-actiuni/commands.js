@@ -39,7 +39,7 @@ const planifica = new SlashCommandBuilder()
   .addStringOption(option =>
     option
       .setName('locatie')
-      .setDescription('Locația (obligatorie la Patrula, Plimbare, Custom)')
+      .setDescription('Locația (obligatorie la Patrula, Plimbare, Farm, Sedinta, Custom)')
       .setRequired(false)
   );
 

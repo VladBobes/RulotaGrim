@@ -25,7 +25,7 @@ function validBase(overrides = {}) {
   };
 }
 
-test('Custom fără titlu este respins; Patrula fără locație este respinsă; Maldive fără locație este acceptată', () => {
+test('Custom fără titlu este respins; Patrula/Farm/Sedinta fără locație sunt respinse; Maldive fără locație este acceptată', () => {
   const custom = validatePlanifica(validBase({ tip: 'Custom', locatie: 'Lac' }));
   assert.equal(custom.ok, false);
   assert.equal(custom.code, 'titlu');
@@ -45,6 +45,20 @@ test('Custom fără titlu este respins; Patrula fără locație este respinsă; 
   assert.equal(maldive.ok, true);
   assert.equal(maldive.action.titlu, 'Maldive');
   assert.equal(maldive.action.locatie, null);
+
+  const farmWithout = validatePlanifica(validBase({ tip: 'Farm' }));
+  assert.equal(farmWithout.ok, false);
+  assert.equal(farmWithout.code, 'locatie');
+
+  const sedintaWithout = validatePlanifica(validBase({ tip: 'Sedinta' }));
+  assert.equal(sedintaWithout.ok, false);
+  assert.equal(sedintaWithout.code, 'locatie');
+
+  const farmOk = validatePlanifica(validBase({ tip: 'Farm', locatie: 'Paleto' }));
+  assert.equal(farmOk.ok, true);
+  assert.equal(farmOk.action.tip, 'Farm');
+  assert.equal(farmOk.action.titlu, 'Farm');
+  assert.equal(farmOk.action.locatie, 'Paleto');
 });
 
 test('parsează data și ora în Europe/Bucharest', () => {
