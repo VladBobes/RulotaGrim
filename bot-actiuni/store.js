@@ -1,10 +1,24 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { applyAbsent, applyPresent } = require('./attendance');
+const { applyAbsent, applyPosition, applyPresent } = require('./attendance');
 
 function emptyState() {
   return { lastResetAt: null, actions: [] };
+}
+
+function cloneStoredAction(action) {
+  if (!action) return null;
+  const next = {
+    ...action,
+    attendees: { ...(action.attendees || {}) },
+    absences: { ...(action.absences || {}) },
+  };
+  if (action.tip === 'banca' || action.positions) {
+    next.positions = { ...(action.positions || {}) };
+    if (Array.isArray(action.positionNames)) next.positionNames = [...action.positionNames];
+  }
+  return next;
 }
 
 function createStore(filePath) {
@@ -15,11 +29,7 @@ function createStore(filePath) {
       if (!data || !Array.isArray(data.actions)) return emptyState();
       return {
         lastResetAt: data.lastResetAt || null,
-        actions: data.actions.map(action => ({
-          ...action,
-          attendees: { ...(action.attendees || {}) },
-          absences: { ...(action.absences || {}) },
-        })),
+        actions: data.actions.map(cloneStoredAction),
       };
     } catch {
       return emptyState();
@@ -34,21 +44,11 @@ function createStore(filePath) {
   }
 
   function listActions() {
-    return read().actions.map(action => ({
-      ...action,
-      attendees: { ...action.attendees },
-      absences: { ...action.absences },
-    }));
+    return read().actions.map(cloneStoredAction);
   }
 
   function getAction(id) {
-    const found = read().actions.find(action => action.id === id);
-    if (!found) return null;
-    return {
-      ...found,
-      attendees: { ...found.attendees },
-      absences: { ...found.absences },
-    };
+    return cloneStoredAction(read().actions.find(action => action.id === id));
   }
 
   function replaceAction(action) {
@@ -77,10 +77,15 @@ function createStore(filePath) {
       attendees: {},
       absences: {},
     };
+    if (input.tip === 'banca') {
+      action.bankName = input.bankName;
+      action.positionNames = [...(input.positionNames || [])];
+      action.positions = {};
+    }
     const data = read();
     data.actions.push(action);
     write(data);
-    return action;
+    return cloneStoredAction(action);
   }
 
   function setMessageRef(id, channelId, messageId) {
@@ -93,6 +98,12 @@ function createStore(filePath) {
 
   function markPresent(id, userId, displayName, at) {
     const result = applyPresent(getAction(id), userId, displayName, at);
+    if (!result.ok) return result;
+    return replaceAction(result.action);
+  }
+
+  function markPosition(id, userId, displayName, position, at) {
+    const result = applyPosition(getAction(id), userId, displayName, position, at);
     if (!result.ok) return result;
     return replaceAction(result.action);
   }
@@ -119,6 +130,7 @@ function createStore(filePath) {
     createAction,
     setMessageRef,
     markPresent,
+    markPosition,
     markAbsent,
     reset,
     getState,

@@ -10,9 +10,82 @@ const ACTION_TYPES = [
   { name: 'Custom', requiresLocation: true, requiresTitle: true },
 ];
 
+const BANKS = [
+  {
+    name: 'Banca Centrala',
+    positions: [
+      'Hotel',
+      'Ambasada',
+      'Parc',
+      'Noodle',
+      'Banca',
+      'Spate Banca',
+      'Jumper',
+      'Hotdog',
+      'Gunshop',
+      'Principala',
+      'Secundara',
+      'Laterala',
+    ],
+  },
+  { name: 'Banca Dusty', positions: ['Service', 'Motel', 'Cafe', 'Banca'] },
+  {
+    name: 'Banca Cartele',
+    positions: ['Lifeinvader', 'Residence', 'Hotel', 'Parcare', 'Banca', 'Supraetajata Banca'],
+  },
+  {
+    name: 'Banca Pillbox',
+    positions: [
+      'Banca',
+      'Cladire Banca',
+      'Motel',
+      'Skate',
+      'Vent',
+      'Market',
+      'Hotel',
+      'Principala',
+      'Secundara',
+    ],
+  },
+  {
+    name: 'Banca Highway',
+    positions: ['Magazin', 'Surf', 'Banca', 'Cladire Secundara', 'Guvid', 'Principala', 'Secundara'],
+  },
+];
+
+const BANCA_BUTTON_PREFIX = 'actiuni:banca:';
+
 function findActionType(tip) {
   const value = String(tip || '').trim();
   return ACTION_TYPES.find(type => type.name === value) || null;
+}
+
+function findBank(name) {
+  const value = String(name || '').trim();
+  return BANKS.find(bank => bank.name === value) || null;
+}
+
+function bankPositionNames(action) {
+  if (Array.isArray(action?.positionNames) && action.positionNames.length) {
+    return action.positionNames;
+  }
+  return findBank(action?.bankName)?.positions || [];
+}
+
+function bancaButtonCustomId(actionId, index) {
+  return `${BANCA_BUTTON_PREFIX}${actionId}:${index}`;
+}
+
+function parseBancaButtonCustomId(customId) {
+  const raw = String(customId || '');
+  if (!raw.startsWith(BANCA_BUTTON_PREFIX)) return null;
+  const rest = raw.slice(BANCA_BUTTON_PREFIX.length);
+  const lastColon = rest.lastIndexOf(':');
+  if (lastColon <= 0) return null;
+  const actionId = rest.slice(0, lastColon);
+  const index = Number(rest.slice(lastColon + 1));
+  if (!actionId || !Number.isInteger(index) || index < 0) return null;
+  return { actionId, index };
 }
 
 function validatePlanifica(input = {}) {
@@ -53,15 +126,48 @@ function validatePlanifica(input = {}) {
   };
 }
 
+function validateBanca(input = {}) {
+  const bank = findBank(input.banca);
+  if (!bank) {
+    return { ok: false, code: 'banca', message: 'Bancă necunoscută.' };
+  }
+
+  const parsed = parseBucharestDateTime(input.data, input.ora);
+  if (!parsed.ok) return parsed;
+
+  return {
+    ok: true,
+    action: {
+      tip: 'banca',
+      bankName: bank.name,
+      titlu: bank.name,
+      positionNames: [...bank.positions],
+      at: parsed.date.toISOString(),
+      dateLabel: parsed.dateLabel,
+      dateTimeLabel: parsed.dateTimeLabel,
+    },
+  };
+}
+
 function actionChoiceLabel(action) {
-  const title = action?.titlu || action?.tip || 'Acțiune';
+  const title =
+    action?.tip === 'banca'
+      ? action.bankName || action.titlu || 'Banca'
+      : action?.titlu || action?.tip || 'Acțiune';
   const dateLabel = action?.dateLabel || '';
   return dateLabel ? `${title} ${dateLabel}` : title;
 }
 
 module.exports = {
   ACTION_TYPES,
+  BANKS,
+  BANCA_BUTTON_PREFIX,
   findActionType,
+  findBank,
+  bankPositionNames,
+  bancaButtonCustomId,
+  parseBancaButtonCustomId,
   validatePlanifica,
+  validateBanca,
   actionChoiceLabel,
 };

@@ -11,10 +11,19 @@ const {
 const { loadEnv } = require('./env');
 const { createStore } = require('./store');
 const { authorizeCommand } = require('./roles');
-const { validatePlanifica, actionChoiceLabel } = require('./validation');
+const {
+  validatePlanifica,
+  validateBanca,
+  actionChoiceLabel,
+  bankPositionNames,
+  bancaButtonCustomId,
+  parseBancaButtonCustomId,
+  BANCA_BUTTON_PREFIX,
+} = require('./validation');
 const {
   formatAttendanceSections,
   formatListaActiuni,
+  groupPositions,
   chunkText,
 } = require('./attendance');
 const { formatBucharest } = require('./datetime');
@@ -75,6 +84,26 @@ function buildActionEmbed(action) {
   return embed;
 }
 
+function buildBankEmbed(action) {
+  const embed = new EmbedBuilder()
+    .setTitle(action.bankName || action.titlu)
+    .setColor(0x2ecc71)
+    .addFields({ name: 'Dată', value: action.dateTimeLabel });
+  const { positions, groups } = groupPositions(action);
+  for (const pos of positions) {
+    const names = groups[pos] || [];
+    embed.addFields({ name: pos, value: names.length ? names.join(', ') : '—' });
+  }
+  const absentCount = Object.keys(action.absences || {}).length;
+  if (absentCount > 0) {
+    embed.addFields({
+      name: `Absenți (${absentCount}):`,
+      value: Object.values(action.absences).map(entry => entry.displayName).join(', '),
+    });
+  }
+  return embed;
+}
+
 function presentButton(actionId) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -82,6 +111,24 @@ function presentButton(actionId) {
       .setLabel('Prezent')
       .setStyle(ButtonStyle.Success)
   );
+}
+
+function positionButtons(action) {
+  const positions = bankPositionNames(action);
+  const rows = [];
+  for (let i = 0; i < positions.length; i += 5) {
+    const row = new ActionRowBuilder();
+    for (let j = i; j < Math.min(i + 5, positions.length); j += 1) {
+      row.addComponents(
+        new ButtonBuilder()
+          .setCustomId(bancaButtonCustomId(action.id, j))
+          .setLabel(positions[j])
+          .setStyle(ButtonStyle.Primary)
+      );
+    }
+    rows.push(row);
+  }
+  return rows;
 }
 
 async function sendText(interaction, text) {
@@ -101,6 +148,13 @@ async function editActionMessage(action) {
   try {
     const channel = await client.channels.fetch(action.channelId);
     const message = await channel.messages.fetch(action.messageId);
+    if (action.tip === 'banca') {
+      await message.edit({
+        embeds: [buildBankEmbed(action)],
+        components: positionButtons(action),
+      });
+      return;
+    }
     await message.edit({ embeds: [buildActionEmbed(action)] });
   } catch (err) {
     console.error('Nu am putut edita mesajul acțiunii:', err);
@@ -144,6 +198,28 @@ async function handlePlanifica(interaction) {
   store.setMessageRef(action.id, interaction.channelId, message.id);
 }
 
+async function handleBanca(interaction) {
+  const validated = validateBanca({
+    banca: interaction.options.getString('banca', true),
+    data: interaction.options.getString('data', true),
+    ora: interaction.options.getString('ora', true),
+  });
+  if (!validated.ok) {
+    await interaction.reply({ content: validated.message, ephemeral: true });
+    return;
+  }
+
+  const action = store.createAction(validated.action);
+  await interaction.reply({
+    content: '@everyone',
+    embeds: [buildBankEmbed(action)],
+    components: positionButtons(action),
+    allowedMentions: { parse: ['everyone'] },
+  });
+  const message = await interaction.fetchReply();
+  store.setMessageRef(action.id, interaction.channelId, message.id);
+}
+
 async function handleAbsent(interaction) {
   const user = interaction.options.getUser('utilizator', true);
   const actionId = interaction.options.getString('actiune', true);
@@ -181,6 +257,25 @@ async function handlePresentButton(interaction) {
   });
 }
 
+async function handleBancaPositionButton(interaction) {
+  const parsed = parseBancaButtonCustomId(interaction.customId);
+  if (!parsed) {
+    await interaction.reply({ content: 'Poziție invalidă.', ephemeral: true });
+    return;
+  }
+  const action = store.getAction(parsed.actionId);
+  const position = bankPositionNames(action)[parsed.index];
+  const result = store.markPosition(parsed.actionId, interaction.user.id, playerName(interaction), position);
+  if (!result.ok) {
+    await interaction.reply({ content: result.message, ephemeral: true });
+    return;
+  }
+  await interaction.update({
+    embeds: [buildBankEmbed(result.action)],
+    components: positionButtons(result.action),
+  });
+}
+
 client.once(Events.ClientReady, readyClient => {
   console.log(`Conectat ca ${readyClient.user.tag}`);
 });
@@ -205,8 +300,14 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     if (interaction.isButton()) {
-      if (!interaction.customId.startsWith(PRESENT_PREFIX)) return;
-      await handlePresentButton(interaction);
+      if (interaction.customId.startsWith(PRESENT_PREFIX)) {
+        await handlePresentButton(interaction);
+        return;
+      }
+      if (interaction.customId.startsWith(BANCA_BUTTON_PREFIX)) {
+        await handleBancaPositionButton(interaction);
+        return;
+      }
       return;
     }
 
@@ -219,6 +320,7 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     if (interaction.commandName === 'planifica') await handlePlanifica(interaction);
+    else if (interaction.commandName === 'banca') await handleBanca(interaction);
     else if (interaction.commandName === 'absent') await handleAbsent(interaction);
     else if (interaction.commandName === 'reset_actiuni') await handleReset(interaction);
     else if (interaction.commandName === 'lista_actiuni') await handleLista(interaction);

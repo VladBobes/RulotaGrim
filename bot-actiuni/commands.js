@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require('discord.js');
-const { ACTION_TYPES } = require('./validation');
+const { ACTION_TYPES, BANKS } = require('./validation');
 
 const planifica = new SlashCommandBuilder()
   .setName('planifica')
@@ -43,6 +43,30 @@ const planifica = new SlashCommandBuilder()
       .setRequired(false)
   );
 
+const banca = new SlashCommandBuilder()
+  .setName('banca')
+  .setDescription('Anunță o acțiune la bancă și deschide pozițiile')
+  .setDMPermission(false)
+  .addStringOption(option =>
+    option
+      .setName('banca')
+      .setDescription('Banca')
+      .setRequired(true)
+      .addChoices(...BANKS.map(bank => ({ name: bank.name, value: bank.name })))
+  )
+  .addStringOption(option =>
+    option
+      .setName('data')
+      .setDescription('Data (DD.MM.YYYY)')
+      .setRequired(true)
+  )
+  .addStringOption(option =>
+    option
+      .setName('ora')
+      .setDescription('Ora (HH:MM, 24 de ore)')
+      .setRequired(true)
+  );
+
 const absent = new SlashCommandBuilder()
   .setName('absent')
   .setDescription('Marchează un membru absent la o acțiune')
@@ -71,6 +95,6 @@ const listaActiuni = new SlashCommandBuilder()
   .setDescription('Arată prezența de la ultimul reset')
   .setDMPermission(false);
 
-const commands = [planifica, absent, resetActiuni, listaActiuni];
+const commands = [planifica, banca, absent, resetActiuni, listaActiuni];
 
 module.exports = { commands };

@@ -1,5 +1,6 @@
 const COMMAND_ROLE_ENV = {
   planifica: 'STAFF_ROLE_IDS',
+  banca: 'STAFF_ROLE_IDS',
   absent: 'STAFF_ROLE_IDS',
   reset_actiuni: 'STAFF_ROLE_IDS',
   lista_actiuni: 'STAFF_ROLE_IDS',

@@ -1,5 +1,5 @@
 const { formatBucharest } = require('./datetime');
-const { actionChoiceLabel } = require('./validation');
+const { actionChoiceLabel, bankPositionNames } = require('./validation');
 
 const ATTENDANCE_MESSAGES = {
   inactive: 'Acțiunea nu mai este activă.',
@@ -19,11 +19,28 @@ function clonePeople(map = {}) {
 
 function cloneAction(action) {
   if (!action) return null;
-  return {
+  const next = {
     ...action,
     attendees: clonePeople(action.attendees),
     absences: clonePeople(action.absences),
   };
+  if (action.positions || action.tip === 'banca') {
+    next.positions = clonePeople(action.positions);
+  }
+  if (Array.isArray(action.positionNames)) {
+    next.positionNames = [...action.positionNames];
+  }
+  return next;
+}
+
+function signupName(info) {
+  return String(info?.displayName || info?.name || '').trim();
+}
+
+function actionSignups(action) {
+  if (!action) return {};
+  if (action.tip === 'banca') return action.positions || {};
+  return action.attendees || {};
 }
 
 function applyPresent(action, userId, displayName, at = new Date().toISOString()) {
@@ -44,6 +61,30 @@ function applyPresent(action, userId, displayName, at = new Date().toISOString()
   return { ok: true, action: next };
 }
 
+function applyPosition(action, userId, displayName, position, at = new Date().toISOString()) {
+  if (!action || action.tip !== 'banca') {
+    return { ok: false, code: 'inactive', message: ATTENDANCE_MESSAGES.inactive };
+  }
+  const id = String(userId || '').trim();
+  if (!id) return { ok: false, code: 'user', message: 'Nu am putut identifica utilizatorul Discord.' };
+  if (action.absences?.[id]) {
+    return { ok: false, code: 'marked_absent', message: ATTENDANCE_MESSAGES.marked_absent, action: cloneAction(action) };
+  }
+  const allowed = bankPositionNames(action);
+  const chosen = String(position || '').trim();
+  if (!chosen || !allowed.includes(chosen)) {
+    return { ok: false, code: 'position', message: 'Poziție invalidă.', action: cloneAction(action) };
+  }
+  const next = cloneAction(action);
+  if (!next.positions) next.positions = {};
+  next.positions[id] = {
+    name: String(displayName || '').trim() || id,
+    position: chosen,
+    at,
+  };
+  return { ok: true, action: next };
+}
+
 function applyAbsent(action, userId, displayName, at = new Date().toISOString()) {
   if (!action) return { ok: false, code: 'inactive', message: ATTENDANCE_MESSAGES.inactive };
   const id = String(userId || '').trim();
@@ -51,12 +92,15 @@ function applyAbsent(action, userId, displayName, at = new Date().toISOString())
   if (action.absences?.[id]) {
     return { ok: false, code: 'already_absent', message: ATTENDANCE_MESSAGES.already_absent, action: cloneAction(action) };
   }
-  if (!action.attendees?.[id]) {
+  const attendee = action.attendees?.[id];
+  const positioned = action.positions?.[id];
+  if (!attendee && !positioned) {
     return { ok: false, code: 'never_present', message: ATTENDANCE_MESSAGES.never_present, action: cloneAction(action) };
   }
   const next = cloneAction(action);
-  const keptName = next.attendees[id].displayName || String(displayName || '').trim() || id;
-  delete next.attendees[id];
+  const keptName = signupName(attendee) || signupName(positioned) || String(displayName || '').trim() || id;
+  if (next.attendees?.[id]) delete next.attendees[id];
+  if (next.positions?.[id]) delete next.positions[id];
   next.absences[id] = { displayName: keptName, at };
   return { ok: true, action: next };
 }
@@ -74,6 +118,31 @@ function formatAttendanceSections(action) {
   const absents = absentNames(action);
   const presentText = `Prezenți (${presents.length}):\n${presents.length ? presents.join(', ') : 'nimeni încă'}`;
   const sections = [presentText];
+  if (absents.length) {
+    sections.push(`Absenți (${absents.length}):\n${absents.join(', ')}`);
+  }
+  return sections.join('\n\n');
+}
+
+function groupPositions(action) {
+  const names = bankPositionNames(action);
+  const groups = Object.fromEntries(names.map(pos => [pos, []]));
+  for (const info of Object.values(action?.positions || {})) {
+    const pos = info.position;
+    if (!groups[pos]) groups[pos] = [];
+    const label = signupName(info);
+    if (label) groups[pos].push(label);
+  }
+  return { positions: names, groups };
+}
+
+function formatPositionSections(action) {
+  const { positions, groups } = groupPositions(action);
+  const sections = positions.map(pos => {
+    const names = groups[pos] || [];
+    return `${pos}:\n${names.length ? names.join(', ') : '—'}`;
+  });
+  const absents = absentNames(action);
   if (absents.length) {
     sections.push(`Absenți (${absents.length}):\n${absents.join(', ')}`);
   }
@@ -123,16 +192,18 @@ function formatListaActiuni(state, now = new Date()) {
   const actions = [...(state?.actions || [])].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
   for (const action of actions) {
     const label = actionChoiceLabel(action);
-    for (const [userId, info] of Object.entries(action.attendees || {})) {
-      if (!people.has(userId)) people.set(userId, { name: info.displayName, presents: [], absences: [] });
+    for (const [userId, info] of Object.entries(actionSignups(action))) {
+      const displayName = signupName(info);
+      if (!people.has(userId)) people.set(userId, { name: displayName, presents: [], absences: [] });
       const person = people.get(userId);
-      if (info.displayName) person.name = info.displayName;
+      if (displayName) person.name = displayName;
       person.presents.push(label);
     }
     for (const [userId, info] of Object.entries(action.absences || {})) {
-      if (!people.has(userId)) people.set(userId, { name: info.displayName, presents: [], absences: [] });
+      const displayName = signupName(info);
+      if (!people.has(userId)) people.set(userId, { name: displayName, presents: [], absences: [] });
       const person = people.get(userId);
-      if (info.displayName) person.name = info.displayName;
+      if (displayName) person.name = displayName;
       person.absences.push(label);
     }
   }
@@ -173,10 +244,13 @@ function chunkText(text, limit = 2000) {
 module.exports = {
   ATTENDANCE_MESSAGES,
   applyPresent,
+  applyPosition,
   applyAbsent,
   presentNames,
   absentNames,
   formatAttendanceSections,
+  groupPositions,
+  formatPositionSections,
   oldestActionTime,
   intervalBounds,
   formatListaActiuni,

@@ -13,7 +13,7 @@ Permisiuni necesare:
 - View Channel
 - Send Messages
 - Embed Links
-- Mention Everyone (`/planifica` începe mesajul cu `@everyone`)
+- Mention Everyone (`/planifica` și `/banca` încep mesajul cu `@everyone`)
 
 Pe rolul botului trebuie bifat **Mention Everyone**. Fără asta, `@everyone` apare în chat dar nu anunță pe nimeni.
 
@@ -30,11 +30,12 @@ Datele stau în `bot-actiuni/data/` (nu se comite). Tokenul stă doar în `bot-a
 ## Comenzi (pe server, dacă `DISCORD_GUILD_ID` este setat)
 
 - `/planifica` — anunță o acțiune, menționează `@everyone` și deschide butonul Prezent.
-- `/absent` — mută un membru din prezenți în absenți.
+- `/banca` — anunță o bancă, menționează `@everyone` și deschide butoanele de poziție.
+- `/absent` — mută un membru din prezenți / de pe poziție în absenți.
 - `/lista_actiuni` — prezența de la ultimul reset.
 - `/reset_actiuni` — șterge istoricul; butoanele vechi nu mai funcționează.
 
-Butonul **Prezent** nu cere rol de staff. O înscriere pe utilizator, fără retragere.
+Butonul **Prezent** nu cere rol de staff. O înscriere pe utilizator, fără retragere. Butoanele de poziție de la `/banca` pot fi apăsate de oricine, de câte ori vrea; ultima poziție rămâne.
 
 ## Instalare pe VM (al doilea proces)
 
