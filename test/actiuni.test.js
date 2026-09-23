@@ -9,19 +9,24 @@ const {
   actionChoiceLabel,
   BANKS,
   bancaButtonCustomId,
+  bancaResultButtonCustomId,
+  parseBancaResultButtonCustomId,
+  bancaResultLabel,
 } = require('../bot-actiuni/validation');
-const { parseBucharestDateTime, formatBucharest } = require('../bot-actiuni/datetime');
+const { parseBucharestDateTime, formatBucharest, isExpired } = require('../bot-actiuni/datetime');
 const {
   applyPresent,
   applyPosition,
+  applyResult,
   applyAbsent,
   formatListaActiuni,
   formatAttendanceSections,
   formatPositionSections,
+  groupPositions,
   chunkText,
 } = require('../bot-actiuni/attendance');
 const { createStore } = require('../bot-actiuni/store');
-const { authorizeCommand } = require('../bot-actiuni/roles');
+const { authorizeCommand, authorizeStaff } = require('../bot-actiuni/roles');
 
 function validBase(overrides = {}) {
   return {
@@ -143,9 +148,9 @@ test('store persistă acțiuni, refuză votul dublu și expiră după reset', ()
     tip: 'Cayo',
     titlu: 'Cayo',
     descriere: 'Heist',
-    at: '2026-09-23T17:00:00.000Z',
-    dateLabel: '23.09.2026',
-    dateTimeLabel: '23.09.2026 20:00',
+    at: '2026-12-31T18:00:00.000Z',
+    dateLabel: '31.12.2026',
+    dateTimeLabel: '31.12.2026 20:00',
   });
   store.setMessageRef(created.id, 'chan', 'msg');
 
@@ -275,14 +280,14 @@ test('banca: mută utilizatorul între poziții, permite apăsări multiple și 
   assert.equal(hotel.action.positions.u1.position, 'Hotel');
   assert.equal(Object.keys(hotel.action.positions).length, 1);
 
-  const banca = applyPosition(hotel.action, 'u1', 'Vlad', 'Banca');
+  const banca = applyPosition(hotel.action, 'u1', 'Vlad', 'In banca');
   assert.equal(banca.ok, true);
-  assert.equal(banca.action.positions.u1.position, 'Banca');
+  assert.equal(banca.action.positions.u1.position, 'In banca');
   assert.equal(Object.keys(banca.action.positions).length, 1);
 
-  const again = applyPosition(banca.action, 'u1', 'Vlad', 'Banca');
+  const again = applyPosition(banca.action, 'u1', 'Vlad', 'Pe banca');
   assert.equal(again.ok, true);
-  assert.equal(again.action.positions.u1.position, 'Banca');
+  assert.equal(again.action.positions.u1.position, 'Pe banca');
   assert.equal(Object.keys(again.action.positions).length, 1);
 
   const jumper = applyPosition(again.action, 'u1', 'Vlad', 'Jumper');
@@ -324,7 +329,7 @@ test('banca: validare, customId scurt și lista pune banca lângă Cayo', () => 
   assert.equal(ok.action.bankName, 'Banca Dusty');
   assert.equal(ok.action.titlu, 'Banca Dusty');
   assert.equal(ok.action.dateTimeLabel, '22.09.2026 21:00');
-  assert.deepEqual(ok.action.positionNames, ['Service', 'Motel', 'Cafe', 'Banca']);
+  assert.deepEqual(ok.action.positionNames, ['Service', 'Motel', 'Cafe', 'In banca', 'Pe banca']);
   assert.equal(ok.action.descriere, undefined);
   assert.equal(ok.action.locatie, undefined);
 
@@ -332,17 +337,26 @@ test('banca: validare, customId scurt și lista pune banca lângă Cayo', () => 
   assert.ok(longest.length <= 100);
   assert.match(longest, /^actiuni:banca:/);
 
+  const resultId = bancaResultButtonCustomId('123e4567-e89b-12d3-a456-426614174000', 'pierduta');
+  assert.ok(resultId.length <= 100);
+  assert.match(resultId, /^actiuni:banca-rezultat:/);
+  assert.deepEqual(parseBancaResultButtonCustomId(resultId), {
+    actionId: '123e4567-e89b-12d3-a456-426614174000',
+    result: 'pierduta',
+  });
+
   const sections = formatPositionSections({
     tip: 'banca',
     bankName: 'Banca Dusty',
-    positionNames: ['Service', 'Motel', 'Cafe', 'Banca'],
+    positionNames: ['Service', 'Motel', 'Cafe', 'In banca', 'Pe banca'],
     positions: { u1: { name: 'Vlad', position: 'Service' } },
     absences: { u2: { displayName: 'Madalin' } },
   });
   assert.match(sections, /Service:\nVlad/);
   assert.match(sections, /Motel:\n—/);
   assert.match(sections, /Cafe:\n—/);
-  assert.match(sections, /Banca:\n—/);
+  assert.match(sections, /In banca:\n—/);
+  assert.match(sections, /Pe banca:\n—/);
   assert.match(sections, /Absenți \(1\):\nMadalin/);
 
   const state = {
@@ -388,33 +402,239 @@ test('store păstrează acțiunile regulate și băncile până la reset', () =>
     tip: 'Cayo',
     titlu: 'Cayo',
     descriere: 'Heist',
-    at: '2026-09-23T17:00:00.000Z',
-    dateLabel: '23.09.2026',
-    dateTimeLabel: '23.09.2026 20:00',
+    at: '2026-12-31T18:00:00.000Z',
+    dateLabel: '31.12.2026',
+    dateTimeLabel: '31.12.2026 20:00',
   });
   const bank = store.createAction({
     tip: 'banca',
     bankName: 'Banca Centrala',
     titlu: 'Banca Centrala',
     positionNames: BANKS.find(item => item.name === 'Banca Centrala').positions,
-    at: '2026-09-22T18:00:00.000Z',
-    dateLabel: '22.09.2026',
-    dateTimeLabel: '22.09.2026 21:00',
+    at: '2026-12-31T19:00:00.000Z',
+    dateLabel: '31.12.2026',
+    dateTimeLabel: '31.12.2026 21:00',
   });
 
   assert.equal(store.markPresent(cayo.id, 'u1', 'Vlad').ok, true);
   assert.equal(store.markPosition(bank.id, 'u1', 'Vlad', 'Hotel').ok, true);
-  assert.equal(store.markPosition(bank.id, 'u1', 'Vlad', 'Banca').ok, true);
-  assert.equal(store.getAction(bank.id).positions.u1.position, 'Banca');
+  assert.equal(store.markPosition(bank.id, 'u1', 'Vlad', 'In banca').ok, true);
+  assert.equal(store.getAction(bank.id).positions.u1.position, 'In banca');
   assert.equal(store.getAction(cayo.id).attendees.u1.displayName, 'Vlad');
 
   const moved = store.markAbsent(bank.id, 'u1', 'Vlad');
   assert.equal(moved.ok, true);
   assert.equal(store.getAction(bank.id).positions.u1, undefined);
   assert.equal(store.markPosition(bank.id, 'u1', 'Vlad', 'Hotel').code, 'marked_absent');
+  assert.equal(store.markResult(bank.id, 'luata').ok, true);
+  assert.equal(store.getAction(bank.id).result, 'luata');
+  assert.equal(store.markResult(bank.id, 'pierduta').ok, true);
+  assert.equal(store.getAction(bank.id).result, 'pierduta');
 
   store.reset(new Date('2026-09-28T17:01:00.000Z'));
   assert.equal(store.getState().actions.length, 0);
   assert.equal(store.getAction(cayo.id), null);
   assert.equal(store.getAction(bank.id), null);
+});
+
+test('listele de bănci înlocuiesc Banca cu In banca și Pe banca', () => {
+  const expected = {
+    'Banca Centrala': [
+      'Hotel',
+      'Ambasada',
+      'Parc',
+      'Noodle',
+      'In banca',
+      'Pe banca',
+      'Spate Banca',
+      'Jumper',
+      'Hotdog',
+      'Gunshop',
+      'Principala',
+      'Secundara',
+      'Laterala',
+    ],
+    'Banca Dusty': ['Service', 'Motel', 'Cafe', 'In banca', 'Pe banca'],
+    'Banca Cartele': [
+      'Lifeinvader',
+      'Residence',
+      'Hotel',
+      'Parcare',
+      'In banca',
+      'Pe banca',
+      'Supraetajata Banca',
+    ],
+    'Banca Pillbox': [
+      'In banca',
+      'Pe banca',
+      'Cladire Banca',
+      'Motel',
+      'Skate',
+      'Vent',
+      'Market',
+      'Hotel',
+      'Principala',
+      'Secundara',
+    ],
+    'Banca Highway': [
+      'Magazin',
+      'Surf',
+      'In banca',
+      'Pe banca',
+      'Cladire Secundara',
+      'Guvid',
+      'Principala',
+      'Secundara',
+    ],
+  };
+
+  for (const bank of BANKS) {
+    assert.deepEqual(bank.positions, expected[bank.name]);
+    assert.ok(bank.positions.includes('In banca'));
+    assert.ok(bank.positions.includes('Pe banca'));
+    assert.ok(!bank.positions.includes('Banca'));
+    assert.ok(bank.positions.includes('In banca') && bank.positions.includes('Pe banca'));
+  }
+
+  const grouped = groupPositions({
+    tip: 'banca',
+    bankName: 'Banca Dusty',
+    positionNames: expected['Banca Dusty'],
+    positions: { u1: { name: 'Vlad', position: 'In banca' } },
+  });
+  assert.deepEqual(grouped.positions, expected['Banca Dusty']);
+  assert.deepEqual(grouped.groups['In banca'], ['Vlad']);
+  assert.deepEqual(grouped.groups['Pe banca'], []);
+  assert.equal(grouped.groups.Banca, undefined);
+});
+
+test('evenimentele vechi cu poziția Banca rămân afișate ca Banca', () => {
+  const sections = formatPositionSections({
+    tip: 'banca',
+    bankName: 'Banca Dusty',
+    positionNames: ['Service', 'Motel', 'Cafe', 'Banca'],
+    positions: { u1: { name: 'Vlad', position: 'Banca' } },
+    absences: {},
+  });
+  assert.match(sections, /Banca:\nVlad/);
+  assert.doesNotMatch(sections, /In banca/);
+  assert.doesNotMatch(sections, /Pe banca/);
+
+  const stay = applyPosition(
+    {
+      tip: 'banca',
+      positionNames: ['Service', 'Motel', 'Cafe', 'Banca'],
+      positions: { u1: { name: 'Vlad', position: 'Banca' } },
+      absences: {},
+      at: '2026-12-31T18:00:00.000Z',
+    },
+    'u1',
+    'Vlad',
+    'Banca'
+  );
+  assert.equal(stay.ok, true);
+  assert.equal(stay.action.positions.u1.position, 'Banca');
+});
+
+test('isExpired: ieri în București e expirat, azi și mâine nu', () => {
+  const now = new Date('2026-09-23T17:00:00.000Z');
+  const yesterday = parseBucharestDateTime('22.09.2026', '20:00');
+  const today = parseBucharestDateTime('23.09.2026', '20:00');
+  const tomorrow = parseBucharestDateTime('24.09.2026', '20:00');
+
+  assert.equal(yesterday.ok, true);
+  assert.equal(isExpired(yesterday.date, now), true);
+  assert.equal(isExpired(yesterday.date.toISOString(), now), true);
+  assert.equal(isExpired(today.date, now), false);
+  assert.equal(isExpired(tomorrow.date, now), false);
+
+  const lateSameDay = new Date('2026-09-22T20:59:59.999Z');
+  assert.equal(isExpired(parseBucharestDateTime('22.09.2026', '10:00').date, lateSameDay), false);
+
+  const justAfterMidnight = new Date('2026-09-22T21:00:00.000Z');
+  assert.equal(isExpired(parseBucharestDateTime('22.09.2026', '23:00').date, justAfterMidnight), true);
+});
+
+test('prezent și poziție sunt respinse după expirare; absent și rezultat rămân permise', () => {
+  const expiredAt = parseBucharestDateTime('22.09.2026', '20:00').date.toISOString();
+  const now = new Date('2026-09-23T00:00:00.000Z');
+
+  const action = {
+    id: 'a-exp',
+    tip: 'Cayo',
+    titlu: 'Cayo',
+    at: expiredAt,
+    attendees: { u1: { displayName: 'Vlad' } },
+    absences: {},
+  };
+  const present = applyPresent(action, 'u2', 'Madalin', undefined, now);
+  assert.equal(present.ok, false);
+  assert.equal(present.code, 'expired');
+  assert.equal(present.message, 'Acțiunea s-a încheiat. Nu mai poți vota prezent.');
+  assert.equal(present.action.attendees.u2, undefined);
+
+  const bank = {
+    id: 'b-exp',
+    tip: 'banca',
+    bankName: 'Banca Dusty',
+    at: expiredAt,
+    positionNames: BANKS.find(item => item.name === 'Banca Dusty').positions,
+    positions: { u1: { name: 'Vlad', position: 'In banca' } },
+    absences: {},
+  };
+  const position = applyPosition(bank, 'u2', 'Madalin', 'Pe banca', undefined, now);
+  assert.equal(position.ok, false);
+  assert.equal(position.code, 'expired');
+  assert.equal(position.message, 'Acțiunea s-a încheiat. Nu mai poți schimba poziția.');
+  assert.equal(position.action.positions.u2, undefined);
+  assert.equal(position.action.positions.u1.position, 'In banca');
+
+  const absent = applyAbsent(bank, 'u1', 'Vlad');
+  assert.equal(absent.ok, true);
+  assert.equal(absent.action.positions.u1, undefined);
+  assert.equal(absent.action.absences.u1.displayName, 'Vlad');
+
+  const lateResult = applyResult({ ...bank, at: expiredAt }, 'luata');
+  assert.equal(lateResult.ok, true);
+  assert.equal(lateResult.action.result, 'luata');
+  assert.equal(bancaResultLabel(lateResult.action.result), 'Banca luată');
+});
+
+test('rezultatul de bancă: ultima apăsare rămâne și butoanele cer staff', () => {
+  const action = {
+    id: 'b-res',
+    tip: 'banca',
+    bankName: 'Banca Dusty',
+    positionNames: BANKS.find(item => item.name === 'Banca Dusty').positions,
+    positions: {},
+    absences: {},
+    at: '2026-12-31T18:00:00.000Z',
+  };
+
+  const taken = applyResult(action, 'luata');
+  assert.equal(taken.ok, true);
+  assert.equal(taken.action.result, 'luata');
+  assert.equal(bancaResultLabel(taken.action.result), 'Banca luată');
+
+  const lost = applyResult(taken.action, 'pierduta');
+  assert.equal(lost.ok, true);
+  assert.equal(lost.action.result, 'pierduta');
+  assert.equal(bancaResultLabel(lost.action.result), 'Banca pierdută');
+
+  const again = applyResult(lost.action, 'luata');
+  assert.equal(again.ok, true);
+  assert.equal(again.action.result, 'luata');
+
+  const invalid = applyResult(action, 'altceva');
+  assert.equal(invalid.ok, false);
+  assert.equal(invalid.action.result, undefined);
+
+  const staff = { roles: ['999'] };
+  const outsider = { roles: ['111'] };
+  const env = { STAFF_ROLE_IDS: '999' };
+  assert.equal(authorizeStaff(staff, env).ok, true);
+  assert.equal(authorizeStaff(outsider, env).ok, false);
+  assert.equal(authorizeStaff(outsider, env).message, 'Nu ai rolul necesar pentru comanda asta.');
+  assert.equal(authorizeCommand('banca', outsider, env).message, 'Nu ai rolul necesar pentru comanda asta.');
+  assert.equal(authorizeStaff(outsider, {}).message, 'Lista de roluri nu este configurată pe bot.');
 });

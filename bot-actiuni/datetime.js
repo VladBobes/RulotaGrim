@@ -109,9 +109,23 @@ function parseBucharestDateTime(dateStr, timeStr) {
   };
 }
 
+function calendarDayKey(date) {
+  const parts = formatInTimeZone(date);
+  return parts.year * 10000 + parts.month * 100 + parts.day;
+}
+
+function isExpired(startsAt, now = new Date()) {
+  if (startsAt == null || startsAt === '') return false;
+  const start = startsAt instanceof Date ? startsAt : new Date(startsAt);
+  const current = now instanceof Date ? now : new Date(now);
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(current.getTime())) return false;
+  return calendarDayKey(current) > calendarDayKey(start);
+}
+
 module.exports = {
   TIMEZONE,
   formatBucharest,
   formatBucharestDate,
   parseBucharestDateTime,
+  isExpired,
 };

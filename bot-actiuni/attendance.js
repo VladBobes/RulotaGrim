@@ -1,5 +1,5 @@
-const { formatBucharest } = require('./datetime');
-const { actionChoiceLabel, bankPositionNames } = require('./validation');
+const { formatBucharest, isExpired } = require('./datetime');
+const { actionChoiceLabel, bankPositionNames, bancaResultLabel } = require('./validation');
 
 const ATTENDANCE_MESSAGES = {
   inactive: 'Acțiunea nu mai este activă.',
@@ -7,6 +7,9 @@ const ATTENDANCE_MESSAGES = {
   marked_absent: 'Ai fost marcat absent la acțiunea asta.',
   never_present: 'Utilizatorul nu s-a înscris la acțiunea asta.',
   already_absent: 'Utilizatorul este deja marcat absent la acțiunea asta.',
+  expired_present: 'Acțiunea s-a încheiat. Nu mai poți vota prezent.',
+  expired_position: 'Acțiunea s-a încheiat. Nu mai poți schimba poziția.',
+  invalid_result: 'Rezultat invalid.',
 };
 
 function clonePeople(map = {}) {
@@ -43,10 +46,13 @@ function actionSignups(action) {
   return action.attendees || {};
 }
 
-function applyPresent(action, userId, displayName, at = new Date().toISOString()) {
+function applyPresent(action, userId, displayName, at = new Date().toISOString(), now = new Date()) {
   if (!action) return { ok: false, code: 'inactive', message: ATTENDANCE_MESSAGES.inactive };
   const id = String(userId || '').trim();
   if (!id) return { ok: false, code: 'user', message: 'Nu am putut identifica utilizatorul Discord.' };
+  if (isExpired(action.at, now)) {
+    return { ok: false, code: 'expired', message: ATTENDANCE_MESSAGES.expired_present, action: cloneAction(action) };
+  }
   if (action.absences?.[id]) {
     return { ok: false, code: 'marked_absent', message: ATTENDANCE_MESSAGES.marked_absent, action: cloneAction(action) };
   }
@@ -61,12 +67,15 @@ function applyPresent(action, userId, displayName, at = new Date().toISOString()
   return { ok: true, action: next };
 }
 
-function applyPosition(action, userId, displayName, position, at = new Date().toISOString()) {
+function applyPosition(action, userId, displayName, position, at = new Date().toISOString(), now = new Date()) {
   if (!action || action.tip !== 'banca') {
     return { ok: false, code: 'inactive', message: ATTENDANCE_MESSAGES.inactive };
   }
   const id = String(userId || '').trim();
   if (!id) return { ok: false, code: 'user', message: 'Nu am putut identifica utilizatorul Discord.' };
+  if (isExpired(action.at, now)) {
+    return { ok: false, code: 'expired', message: ATTENDANCE_MESSAGES.expired_position, action: cloneAction(action) };
+  }
   if (action.absences?.[id]) {
     return { ok: false, code: 'marked_absent', message: ATTENDANCE_MESSAGES.marked_absent, action: cloneAction(action) };
   }
@@ -82,6 +91,19 @@ function applyPosition(action, userId, displayName, position, at = new Date().to
     position: chosen,
     at,
   };
+  return { ok: true, action: next };
+}
+
+function applyResult(action, result) {
+  if (!action || action.tip !== 'banca') {
+    return { ok: false, code: 'inactive', message: ATTENDANCE_MESSAGES.inactive };
+  }
+  const label = bancaResultLabel(result);
+  if (!label) {
+    return { ok: false, code: 'result', message: ATTENDANCE_MESSAGES.invalid_result, action: cloneAction(action) };
+  }
+  const next = cloneAction(action);
+  next.result = result;
   return { ok: true, action: next };
 }
 
@@ -245,6 +267,7 @@ module.exports = {
   ATTENDANCE_MESSAGES,
   applyPresent,
   applyPosition,
+  applyResult,
   applyAbsent,
   presentNames,
   absentNames,

@@ -18,7 +18,8 @@ const BANKS = [
       'Ambasada',
       'Parc',
       'Noodle',
-      'Banca',
+      'In banca',
+      'Pe banca',
       'Spate Banca',
       'Jumper',
       'Hotdog',
@@ -28,15 +29,16 @@ const BANKS = [
       'Laterala',
     ],
   },
-  { name: 'Banca Dusty', positions: ['Service', 'Motel', 'Cafe', 'Banca'] },
+  { name: 'Banca Dusty', positions: ['Service', 'Motel', 'Cafe', 'In banca', 'Pe banca'] },
   {
     name: 'Banca Cartele',
-    positions: ['Lifeinvader', 'Residence', 'Hotel', 'Parcare', 'Banca', 'Supraetajata Banca'],
+    positions: ['Lifeinvader', 'Residence', 'Hotel', 'Parcare', 'In banca', 'Pe banca', 'Supraetajata Banca'],
   },
   {
     name: 'Banca Pillbox',
     positions: [
-      'Banca',
+      'In banca',
+      'Pe banca',
       'Cladire Banca',
       'Motel',
       'Skate',
@@ -49,11 +51,16 @@ const BANKS = [
   },
   {
     name: 'Banca Highway',
-    positions: ['Magazin', 'Surf', 'Banca', 'Cladire Secundara', 'Guvid', 'Principala', 'Secundara'],
+    positions: ['Magazin', 'Surf', 'In banca', 'Pe banca', 'Cladire Secundara', 'Guvid', 'Principala', 'Secundara'],
   },
 ];
 
 const BANCA_BUTTON_PREFIX = 'actiuni:banca:';
+const BANCA_RESULT_PREFIX = 'actiuni:banca-rezultat:';
+const BANCA_RESULTS = {
+  luata: 'Banca luată',
+  pierduta: 'Banca pierdută',
+};
 
 function findActionType(tip) {
   const value = String(tip || '').trim();
@@ -86,6 +93,26 @@ function parseBancaButtonCustomId(customId) {
   const index = Number(rest.slice(lastColon + 1));
   if (!actionId || !Number.isInteger(index) || index < 0) return null;
   return { actionId, index };
+}
+
+function bancaResultButtonCustomId(actionId, result) {
+  return `${BANCA_RESULT_PREFIX}${actionId}:${result}`;
+}
+
+function parseBancaResultButtonCustomId(customId) {
+  const raw = String(customId || '');
+  if (!raw.startsWith(BANCA_RESULT_PREFIX)) return null;
+  const rest = raw.slice(BANCA_RESULT_PREFIX.length);
+  const lastColon = rest.lastIndexOf(':');
+  if (lastColon <= 0) return null;
+  const actionId = rest.slice(0, lastColon);
+  const result = rest.slice(lastColon + 1);
+  if (!actionId || !BANCA_RESULTS[result]) return null;
+  return { actionId, result };
+}
+
+function bancaResultLabel(result) {
+  return BANCA_RESULTS[result] || null;
 }
 
 function validatePlanifica(input = {}) {
@@ -162,11 +189,16 @@ module.exports = {
   ACTION_TYPES,
   BANKS,
   BANCA_BUTTON_PREFIX,
+  BANCA_RESULT_PREFIX,
+  BANCA_RESULTS,
   findActionType,
   findBank,
   bankPositionNames,
   bancaButtonCustomId,
   parseBancaButtonCustomId,
+  bancaResultButtonCustomId,
+  parseBancaResultButtonCustomId,
+  bancaResultLabel,
   validatePlanifica,
   validateBanca,
   actionChoiceLabel,

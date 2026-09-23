@@ -10,7 +10,7 @@ const {
 } = require('discord.js');
 const { loadEnv } = require('./env');
 const { createStore } = require('./store');
-const { authorizeCommand } = require('./roles');
+const { authorizeCommand, authorizeStaff } = require('./roles');
 const {
   validatePlanifica,
   validateBanca,
@@ -18,7 +18,11 @@ const {
   bankPositionNames,
   bancaButtonCustomId,
   parseBancaButtonCustomId,
+  bancaResultButtonCustomId,
+  parseBancaResultButtonCustomId,
+  bancaResultLabel,
   BANCA_BUTTON_PREFIX,
+  BANCA_RESULT_PREFIX,
 } = require('./validation');
 const {
   formatAttendanceSections,
@@ -26,7 +30,7 @@ const {
   groupPositions,
   chunkText,
 } = require('./attendance');
-const { formatBucharest } = require('./datetime');
+const { formatBucharest, isExpired } = require('./datetime');
 
 loadEnv(path.join(__dirname, '.env'));
 
@@ -89,6 +93,10 @@ function buildBankEmbed(action) {
     .setTitle(action.bankName || action.titlu)
     .setColor(0x2ecc71)
     .addFields({ name: 'Dată', value: action.dateTimeLabel });
+  const resultLabel = bancaResultLabel(action.result);
+  if (resultLabel) {
+    embed.addFields({ name: 'Rezultat', value: resultLabel });
+  }
   const { positions, groups } = groupPositions(action);
   for (const pos of positions) {
     const names = groups[pos] || [];
@@ -104,16 +112,17 @@ function buildBankEmbed(action) {
   return embed;
 }
 
-function presentButton(actionId) {
+function presentButton(actionId, disabled = false) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`${PRESENT_PREFIX}${actionId}`)
       .setLabel('Prezent')
       .setStyle(ButtonStyle.Success)
+      .setDisabled(disabled)
   );
 }
 
-function positionButtons(action) {
+function positionButtons(action, disabled = false) {
   const positions = bankPositionNames(action);
   const rows = [];
   for (let i = 0; i < positions.length; i += 5) {
@@ -124,11 +133,33 @@ function positionButtons(action) {
           .setCustomId(bancaButtonCustomId(action.id, j))
           .setLabel(positions[j])
           .setStyle(ButtonStyle.Primary)
+          .setDisabled(disabled)
       );
     }
     rows.push(row);
   }
   return rows;
+}
+
+function resultButtons(action) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(bancaResultButtonCustomId(action.id, 'luata'))
+      .setLabel('Banca luata')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(bancaResultButtonCustomId(action.id, 'pierduta'))
+      .setLabel('Banca pierduta')
+      .setStyle(ButtonStyle.Danger)
+  );
+}
+
+function planificaComponents(action, now = new Date()) {
+  return [presentButton(action.id, isExpired(action?.at, now))];
+}
+
+function bancaComponents(action, now = new Date()) {
+  return [...positionButtons(action, isExpired(action?.at, now)), resultButtons(action)];
 }
 
 async function sendText(interaction, text) {
@@ -151,11 +182,14 @@ async function editActionMessage(action) {
     if (action.tip === 'banca') {
       await message.edit({
         embeds: [buildBankEmbed(action)],
-        components: positionButtons(action),
+        components: bancaComponents(action),
       });
       return;
     }
-    await message.edit({ embeds: [buildActionEmbed(action)] });
+    await message.edit({
+      embeds: [buildActionEmbed(action)],
+      components: planificaComponents(action),
+    });
   } catch (err) {
     console.error('Nu am putut edita mesajul acțiunii:', err);
   }
@@ -191,7 +225,7 @@ async function handlePlanifica(interaction) {
   await interaction.reply({
     content: '@everyone',
     embeds: [buildActionEmbed(action)],
-    components: [presentButton(action.id)],
+    components: planificaComponents(action),
     allowedMentions: { parse: ['everyone'] },
   });
   const message = await interaction.fetchReply();
@@ -213,7 +247,7 @@ async function handleBanca(interaction) {
   await interaction.reply({
     content: '@everyone',
     embeds: [buildBankEmbed(action)],
-    components: positionButtons(action),
+    components: bancaComponents(action),
     allowedMentions: { parse: ['everyone'] },
   });
   const message = await interaction.fetchReply();
@@ -249,11 +283,12 @@ async function handlePresentButton(interaction) {
   const result = store.markPresent(actionId, interaction.user.id, playerName(interaction));
   if (!result.ok) {
     await interaction.reply({ content: result.message, ephemeral: true });
+    if (result.code === 'expired' && result.action) await editActionMessage(result.action);
     return;
   }
   await interaction.update({
     embeds: [buildActionEmbed(result.action)],
-    components: [presentButton(result.action.id)],
+    components: planificaComponents(result.action),
   });
 }
 
@@ -268,11 +303,34 @@ async function handleBancaPositionButton(interaction) {
   const result = store.markPosition(parsed.actionId, interaction.user.id, playerName(interaction), position);
   if (!result.ok) {
     await interaction.reply({ content: result.message, ephemeral: true });
+    if (result.code === 'expired' && result.action) await editActionMessage(result.action);
     return;
   }
   await interaction.update({
     embeds: [buildBankEmbed(result.action)],
-    components: positionButtons(result.action),
+    components: bancaComponents(result.action),
+  });
+}
+
+async function handleBancaResultButton(interaction) {
+  const parsed = parseBancaResultButtonCustomId(interaction.customId);
+  if (!parsed) {
+    await interaction.reply({ content: 'Rezultat invalid.', ephemeral: true });
+    return;
+  }
+  const gate = authorizeStaff(interaction.member);
+  if (!gate.ok) {
+    await interaction.reply({ content: gate.message, ephemeral: true });
+    return;
+  }
+  const result = store.markResult(parsed.actionId, parsed.result);
+  if (!result.ok) {
+    await interaction.reply({ content: result.message, ephemeral: true });
+    return;
+  }
+  await interaction.update({
+    embeds: [buildBankEmbed(result.action)],
+    components: bancaComponents(result.action),
   });
 }
 
@@ -302,6 +360,10 @@ client.on(Events.InteractionCreate, async interaction => {
     if (interaction.isButton()) {
       if (interaction.customId.startsWith(PRESENT_PREFIX)) {
         await handlePresentButton(interaction);
+        return;
+      }
+      if (interaction.customId.startsWith(BANCA_RESULT_PREFIX)) {
+        await handleBancaResultButton(interaction);
         return;
       }
       if (interaction.customId.startsWith(BANCA_BUTTON_PREFIX)) {

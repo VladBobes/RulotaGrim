@@ -42,9 +42,7 @@ function isAllowed(memberIds, configuredIds) {
   return memberIds.some(id => allowed.has(id));
 }
 
-function authorizeCommand(commandName, member, env = process.env) {
-  const envKey = COMMAND_ROLE_ENV[commandName];
-  if (!envKey) return { ok: true };
+function authorizeEnvRoles(member, envKey, env = process.env) {
   const configured = parseRoleIds(env[envKey]);
   if (configured.length === 0) {
     return { ok: false, code: 'unconfigured', message: MESSAGES.unconfigured };
@@ -55,11 +53,22 @@ function authorizeCommand(commandName, member, env = process.env) {
   return { ok: true };
 }
 
+function authorizeStaff(member, env = process.env) {
+  return authorizeEnvRoles(member, 'STAFF_ROLE_IDS', env);
+}
+
+function authorizeCommand(commandName, member, env = process.env) {
+  const envKey = COMMAND_ROLE_ENV[commandName];
+  if (!envKey) return { ok: true };
+  return authorizeEnvRoles(member, envKey, env);
+}
+
 module.exports = {
   COMMAND_ROLE_ENV,
   MESSAGES,
   parseRoleIds,
   memberRoleIds,
   isAllowed,
+  authorizeStaff,
   authorizeCommand,
 };

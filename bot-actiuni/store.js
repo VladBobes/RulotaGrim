@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { applyAbsent, applyPosition, applyPresent } = require('./attendance');
+const { applyAbsent, applyPosition, applyPresent, applyResult } = require('./attendance');
 
 function emptyState() {
   return { lastResetAt: null, actions: [] };
@@ -114,6 +114,12 @@ function createStore(filePath) {
     return replaceAction(result.action);
   }
 
+  function markResult(id, outcome) {
+    const result = applyResult(getAction(id), outcome);
+    if (!result.ok) return result;
+    return replaceAction(result.action);
+  }
+
   function reset(now = new Date()) {
     const lastResetAt = now.toISOString();
     write({ lastResetAt, actions: [] });
@@ -132,6 +138,7 @@ function createStore(filePath) {
     markPresent,
     markPosition,
     markAbsent,
+    markResult,
     reset,
     getState,
     filePath,
