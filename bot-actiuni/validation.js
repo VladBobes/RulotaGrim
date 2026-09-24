@@ -187,12 +187,35 @@ function actionChoiceLabel(action) {
   return dateLabel ? `${title} ${dateLabel}` : title;
 }
 
+function isBancaAction(action) {
+  return action?.tip === 'banca';
+}
+
+function recentPlanificaActions(actions, query = '') {
+  const needle = String(query || '').trim().toLowerCase();
+  return [...(actions || [])]
+    .filter(action => action && !isBancaAction(action))
+    .sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    .filter(action => !needle || actionChoiceLabel(action).toLowerCase().includes(needle))
+    .slice(0, 25);
+}
+
+const ABSENT_BANK_MESSAGE = 'Poți marca absent doar la acțiuni, nu la bănci.';
+
+function validateAbsentTarget(action) {
+  if (isBancaAction(action)) {
+    return { ok: false, code: 'bank', message: ABSENT_BANK_MESSAGE };
+  }
+  return { ok: true, action };
+}
+
 module.exports = {
   ACTION_TYPES,
   BANKS,
   BANCA_BUTTON_PREFIX,
   BANCA_RESULT_PREFIX,
   BANCA_RESULTS,
+  ABSENT_BANK_MESSAGE,
   findActionType,
   findBank,
   bankPositionNames,
@@ -204,4 +227,7 @@ module.exports = {
   validatePlanifica,
   validateBanca,
   actionChoiceLabel,
+  isBancaAction,
+  recentPlanificaActions,
+  validateAbsentTarget,
 };

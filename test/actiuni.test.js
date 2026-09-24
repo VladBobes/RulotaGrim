@@ -12,6 +12,9 @@ const {
   bancaResultButtonCustomId,
   parseBancaResultButtonCustomId,
   bancaResultLabel,
+  recentPlanificaActions,
+  validateAbsentTarget,
+  ABSENT_BANK_MESSAGE,
 } = require('../bot-actiuni/validation');
 const { parseBucharestDateTime, formatBucharest, isExpired, isClosed } = require('../bot-actiuni/datetime');
 const {
@@ -401,6 +404,86 @@ test('banca: validare, customId scurt și lista pune banca lângă Cayo', () => 
   assert.doesNotMatch(text, /Madalin/);
   assert.equal(actionChoiceLabel(state.actions[1]), 'Banca Dusty 22.09.2026');
   assert.equal(actionChoiceLabel({ tip: 'banca', bankName: 'Banca Centrala', dateLabel: '22.09.2026' }), 'Banca Centrala 22.09.2026');
+
+  const absentChoices = recentPlanificaActions(state.actions);
+  assert.deepEqual(absentChoices.map(action => action.tip), ['Cayo']);
+  assert.equal(absentChoices.length, 1);
+  assert.ok(absentChoices.every(action => action.tip !== 'banca'));
+  assert.deepEqual(recentPlanificaActions(state.actions, 'Banca'), []);
+  assert.deepEqual(recentPlanificaActions(state.actions, 'Cayo').map(action => action.titlu), ['Cayo']);
+
+  const bankBlocked = validateAbsentTarget(state.actions[1]);
+  assert.equal(bankBlocked.ok, false);
+  assert.equal(bankBlocked.code, 'bank');
+  assert.equal(bankBlocked.message, ABSENT_BANK_MESSAGE);
+  assert.equal(bankBlocked.message, 'Poți marca absent doar la acțiuni, nu la bănci.');
+
+  const planificaAllowed = validateAbsentTarget(state.actions[0]);
+  assert.equal(planificaAllowed.ok, true);
+  assert.equal(planificaAllowed.action.tip, 'Cayo');
+});
+
+test('/absent autocomplete listează doar acțiuni planifica și respinge id-urile de bancă', () => {
+  const actions = [
+    {
+      id: 'p-old',
+      tip: 'Cayo',
+      titlu: 'Cayo',
+      dateLabel: '21.09.2026',
+      at: '2026-09-21T17:00:00.000Z',
+      createdAt: '2026-09-21T10:00:00.000Z',
+    },
+    {
+      id: 'b-dusty',
+      tip: 'banca',
+      bankName: 'Banca Dusty',
+      titlu: 'Banca Dusty',
+      dateLabel: '22.09.2026',
+      at: '2026-09-22T18:00:00.000Z',
+      createdAt: '2026-09-22T09:00:00.000Z',
+    },
+    {
+      id: 'p-new',
+      tip: 'Farm',
+      titlu: 'Farm',
+      dateLabel: '24.09.2026',
+      at: '2026-09-24T17:00:00.000Z',
+      createdAt: '2026-09-23T10:00:00.000Z',
+    },
+    {
+      id: 'b-centrala',
+      tip: 'banca',
+      bankName: 'Banca Centrala',
+      titlu: 'Banca Centrala',
+      dateLabel: '24.09.2026',
+      at: '2026-09-24T18:00:00.000Z',
+      createdAt: '2026-09-23T11:00:00.000Z',
+    },
+  ];
+
+  const choices = recentPlanificaActions(actions);
+  assert.deepEqual(choices.map(action => action.id), ['p-new', 'p-old']);
+  assert.ok(choices.every(action => action.tip !== 'banca'));
+  assert.deepEqual(recentPlanificaActions(actions, 'farm').map(action => action.id), ['p-new']);
+  assert.deepEqual(recentPlanificaActions(actions, 'Banca Dusty'), []);
+  assert.deepEqual(recentPlanificaActions(actions, 'Centrala'), []);
+
+  const many = Array.from({ length: 30 }, (_, index) => ({
+    id: `p-${index}`,
+    tip: 'Cayo',
+    titlu: `Cayo ${index}`,
+    dateLabel: '25.09.2026',
+    at: `2026-09-25T${String(10 + (index % 10)).padStart(2, '0')}:00:00.000Z`,
+    createdAt: `2026-09-24T${String(10 + (index % 10)).padStart(2, '0')}:00:00.000Z`,
+  }));
+  assert.equal(recentPlanificaActions([...many, actions[1]]).length, 25);
+  assert.ok(recentPlanificaActions([...many, actions[1]]).every(action => action.tip !== 'banca'));
+
+  const rejected = validateAbsentTarget(actions[1]);
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.message, 'Poți marca absent doar la acțiuni, nu la bănci.');
+  assert.equal(validateAbsentTarget(actions[0]).ok, true);
+  assert.equal(validateAbsentTarget(null).ok, true);
 });
 
 test('store păstrează acțiunile regulate și băncile până la reset', () => {
@@ -423,6 +506,10 @@ test('store păstrează acțiunile regulate și băncile până la reset', () =>
     dateLabel: '31.12.2026',
     dateTimeLabel: '31.12.2026 21:00',
   });
+
+  assert.deepEqual(recentPlanificaActions(store.listActions()).map(action => action.id), [cayo.id]);
+  assert.equal(validateAbsentTarget(store.getAction(bank.id)).ok, false);
+  assert.equal(validateAbsentTarget(store.getAction(cayo.id)).ok, true);
 
   assert.equal(store.markPresent(cayo.id, 'u1', 'Vlad').ok, true);
   assert.equal(store.markPosition(bank.id, 'u1', 'Vlad', 'Hotel').ok, true);

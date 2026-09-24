@@ -23,6 +23,8 @@ const {
   bancaResultLabel,
   BANCA_BUTTON_PREFIX,
   BANCA_RESULT_PREFIX,
+  recentPlanificaActions,
+  validateAbsentTarget,
 } = require('./validation');
 const {
   formatAttendanceSections,
@@ -200,15 +202,7 @@ async function editActionMessage(action) {
 }
 
 function recentActions(query = '') {
-  const needle = String(query || '').trim().toLowerCase();
-  return store
-    .listActions()
-    .sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || Date.parse(b.createdAt) - Date.parse(a.createdAt))
-    .filter(action => {
-      if (!needle) return true;
-      return actionChoiceLabel(action).toLowerCase().includes(needle);
-    })
-    .slice(0, 25);
+  return recentPlanificaActions(store.listActions(), query);
 }
 
 async function handlePlanifica(interaction) {
@@ -261,6 +255,11 @@ async function handleBanca(interaction) {
 async function handleAbsent(interaction) {
   const user = interaction.options.getUser('utilizator', true);
   const actionId = interaction.options.getString('actiune', true);
+  const blocked = validateAbsentTarget(store.getAction(actionId));
+  if (!blocked.ok) {
+    await interaction.reply({ content: blocked.message, ephemeral: true });
+    return;
+  }
   const result = store.markAbsent(actionId, user.id, targetDisplayName(interaction));
   if (!result.ok) {
     await interaction.reply({ content: result.message, ephemeral: true });
