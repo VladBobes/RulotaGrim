@@ -32,8 +32,9 @@ Datele stau în `bot-actiuni/data/` (nu se comite). Tokenul stă doar în `bot-a
 - `/planifica` — anunță o acțiune, menționează `@everyone` și deschide butonul Prezent.
 - `/banca` — anunță o bancă, menționează `@everyone` și deschide butoanele de poziție.
 - `/absent` — mută un membru din prezenți / de pe poziție în absenți.
-- `/lista_actiuni` — prezența de la ultimul reset.
-- `/reset_actiuni` — șterge istoricul; butoanele vechi nu mai funcționează.
+- `/lista_actiuni` — prezența de la `/planifica` de la ultimul reset (fără bănci).
+- `/rezultate-banci` — istoricul băncilor câștigate și pierdute; nu se șterge la reset.
+- `/reset_actiuni` — șterge istoricul de prezență; butoanele vechi nu mai funcționează.
 
 Butonul **Prezent** nu cere rol de staff. O înscriere pe utilizator, fără retragere. Butoanele de poziție de la `/banca` pot fi apăsate de oricine, de câte ori vrea; ultima poziție rămâne.
 

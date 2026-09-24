@@ -27,10 +27,12 @@ const {
 const {
   formatAttendanceSections,
   formatListaActiuni,
+  formatPositionTotal,
   groupPositions,
   chunkText,
 } = require('./attendance');
-const { formatBucharest, isExpired } = require('./datetime');
+const { formatBucharest, isExpired, isClosed } = require('./datetime');
+const { createBankResultsStore } = require('./bank-results');
 
 loadEnv(path.join(__dirname, '.env'));
 
@@ -42,6 +44,7 @@ if (!token) {
 
 const PRESENT_PREFIX = 'actiuni:prezent:';
 const store = createStore(path.join(__dirname, 'data', 'actiuni.json'));
+const bankResults = createBankResultsStore(path.join(__dirname, 'data', 'bank-results.json'));
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 function playerName(interaction) {
@@ -97,6 +100,7 @@ function buildBankEmbed(action) {
   if (resultLabel) {
     embed.addFields({ name: 'Rezultat', value: resultLabel });
   }
+  embed.addFields({ name: formatPositionTotal(action), value: '\u200b' });
   const { positions, groups } = groupPositions(action);
   for (const pos of positions) {
     const names = groups[pos] || [];
@@ -159,7 +163,7 @@ function planificaComponents(action, now = new Date()) {
 }
 
 function bancaComponents(action, now = new Date()) {
-  return [...positionButtons(action, isExpired(action?.at, now)), resultButtons(action)];
+  return [...positionButtons(action, isClosed(action, now)), resultButtons(action)];
 }
 
 async function sendText(interaction, text) {
@@ -278,6 +282,10 @@ async function handleLista(interaction) {
   await sendText(interaction, formatListaActiuni(store.getState(), new Date()));
 }
 
+async function handleRezultateBanci(interaction) {
+  await interaction.reply({ content: bankResults.formatTotals() });
+}
+
 async function handlePresentButton(interaction) {
   const actionId = interaction.customId.slice(PRESENT_PREFIX.length);
   const result = store.markPresent(actionId, interaction.user.id, playerName(interaction));
@@ -328,6 +336,7 @@ async function handleBancaResultButton(interaction) {
     await interaction.reply({ content: result.message, ephemeral: true });
     return;
   }
+  bankResults.upsert(parsed.actionId, parsed.result);
   await interaction.update({
     embeds: [buildBankEmbed(result.action)],
     components: bancaComponents(result.action),
@@ -386,6 +395,7 @@ client.on(Events.InteractionCreate, async interaction => {
     else if (interaction.commandName === 'absent') await handleAbsent(interaction);
     else if (interaction.commandName === 'reset_actiuni') await handleReset(interaction);
     else if (interaction.commandName === 'lista_actiuni') await handleLista(interaction);
+    else if (interaction.commandName === 'rezultate-banci') await handleRezultateBanci(interaction);
   } catch (err) {
     console.error(err);
     const payload = { content: 'A apărut o eroare. Încearcă din nou.', ephemeral: true };

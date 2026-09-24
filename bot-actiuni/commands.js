@@ -95,6 +95,11 @@ const listaActiuni = new SlashCommandBuilder()
   .setDescription('Arată prezența de la ultimul reset')
   .setDMPermission(false);
 
-const commands = [planifica, banca, absent, resetActiuni, listaActiuni];
+const rezultateBanci = new SlashCommandBuilder()
+  .setName('rezultate-banci')
+  .setDescription('Arată istoricul băncilor câștigate și pierdute')
+  .setDMPermission(false);
+
+const commands = [planifica, banca, absent, resetActiuni, listaActiuni, rezultateBanci];
 
 module.exports = { commands };

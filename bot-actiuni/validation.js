@@ -27,12 +27,13 @@ const BANKS = [
       'Principala',
       'Secundara',
       'Laterala',
+      'Patrula',
     ],
   },
-  { name: 'Banca Dusty', positions: ['Service', 'Motel', 'Cafe', 'In banca', 'Pe banca'] },
+  { name: 'Banca Dusty', positions: ['Service', 'Motel', 'Cafe', 'In banca', 'Pe banca', 'Patrula'] },
   {
     name: 'Banca Cartele',
-    positions: ['Lifeinvader', 'Residence', 'Hotel', 'Parcare', 'In banca', 'Pe banca', 'Supraetajata Banca'],
+    positions: ['Lifeinvader', 'Residence', 'Hotel', 'Parcare', 'In banca', 'Pe banca', 'Supraetajata Banca', 'Patrula'],
   },
   {
     name: 'Banca Pillbox',
@@ -47,11 +48,12 @@ const BANKS = [
       'Hotel',
       'Principala',
       'Secundara',
+      'Patrula',
     ],
   },
   {
     name: 'Banca Highway',
-    positions: ['Magazin', 'Surf', 'In banca', 'Pe banca', 'Cladire Secundara', 'Guvid', 'Principala', 'Secundara'],
+    positions: ['Magazin', 'Surf', 'In banca', 'Pe banca', 'Cladire Secundara', 'Guvid', 'Principala', 'Secundara', 'Patrula'],
   },
 ];
 

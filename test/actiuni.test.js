@@ -13,7 +13,7 @@ const {
   parseBancaResultButtonCustomId,
   bancaResultLabel,
 } = require('../bot-actiuni/validation');
-const { parseBucharestDateTime, formatBucharest, isExpired } = require('../bot-actiuni/datetime');
+const { parseBucharestDateTime, formatBucharest, isExpired, isClosed } = require('../bot-actiuni/datetime');
 const {
   applyPresent,
   applyPosition,
@@ -22,10 +22,13 @@ const {
   formatListaActiuni,
   formatAttendanceSections,
   formatPositionSections,
+  formatPositionTotal,
+  positionTotal,
   groupPositions,
   chunkText,
 } = require('../bot-actiuni/attendance');
 const { createStore } = require('../bot-actiuni/store');
+const { createBankResultsStore, formatBankResults } = require('../bot-actiuni/bank-results');
 const { authorizeCommand, authorizeStaff } = require('../bot-actiuni/roles');
 
 function validBase(overrides = {}) {
@@ -259,6 +262,9 @@ test('verificarea de rol refuză configurația goală cu același mesaj', () => 
   assert.equal(authorizeCommand('banca', member, { STAFF_ROLE_IDS: '999' }).message, 'Nu ai rolul necesar pentru comanda asta.');
   assert.equal(authorizeCommand('banca', { roles: ['999'] }, { STAFF_ROLE_IDS: '999' }).ok, true);
   assert.equal(authorizeCommand('reset_actiuni', { roles: ['999'] }, { STAFF_ROLE_IDS: '999' }).ok, true);
+  assert.equal(authorizeCommand('rezultate-banci', member, { STAFF_ROLE_IDS: '999' }).message, 'Nu ai rolul necesar pentru comanda asta.');
+  assert.equal(authorizeCommand('rezultate-banci', { roles: ['999'] }, { STAFF_ROLE_IDS: '999' }).ok, true);
+  assert.equal(authorizeCommand('rezultate-banci', member, {}).message, 'Lista de roluri nu este configurată pe bot.');
   assert.equal(authorizeCommand('prezent', member, {}).ok, true);
 });
 
@@ -329,7 +335,7 @@ test('banca: validare, customId scurt și lista pune banca lângă Cayo', () => 
   assert.equal(ok.action.bankName, 'Banca Dusty');
   assert.equal(ok.action.titlu, 'Banca Dusty');
   assert.equal(ok.action.dateTimeLabel, '22.09.2026 21:00');
-  assert.deepEqual(ok.action.positionNames, ['Service', 'Motel', 'Cafe', 'In banca', 'Pe banca']);
+  assert.deepEqual(ok.action.positionNames, ['Service', 'Motel', 'Cafe', 'In banca', 'Pe banca', 'Patrula']);
   assert.equal(ok.action.descriere, undefined);
   assert.equal(ok.action.locatie, undefined);
 
@@ -352,6 +358,7 @@ test('banca: validare, customId scurt și lista pune banca lângă Cayo', () => 
     positions: { u1: { name: 'Vlad', position: 'Service' } },
     absences: { u2: { displayName: 'Madalin' } },
   });
+  assert.match(sections, /Total: 1/);
   assert.match(sections, /Service:\nVlad/);
   assert.match(sections, /Motel:\n—/);
   assert.match(sections, /Cafe:\n—/);
@@ -387,10 +394,11 @@ test('banca: validare, customId scurt și lista pune banca lângă Cayo', () => 
     text,
     [
       'În intervalul 21.09.2026 19:59 - 28.09.2026 20:01:',
-      'Vlad - 2 acțiuni (Banca Dusty 22.09.2026, Cayo 23.09.2026)',
-      'Madalin - 0 acțiuni, 1 absență (Banca Dusty 22.09.2026)',
+      'Vlad - 1 acțiune (Cayo 23.09.2026)',
     ].join('\n')
   );
+  assert.doesNotMatch(text, /Banca Dusty/);
+  assert.doesNotMatch(text, /Madalin/);
   assert.equal(actionChoiceLabel(state.actions[1]), 'Banca Dusty 22.09.2026');
   assert.equal(actionChoiceLabel({ tip: 'banca', bankName: 'Banca Centrala', dateLabel: '22.09.2026' }), 'Banca Centrala 22.09.2026');
 });
@@ -453,8 +461,9 @@ test('listele de bănci înlocuiesc Banca cu In banca și Pe banca', () => {
       'Principala',
       'Secundara',
       'Laterala',
+      'Patrula',
     ],
-    'Banca Dusty': ['Service', 'Motel', 'Cafe', 'In banca', 'Pe banca'],
+    'Banca Dusty': ['Service', 'Motel', 'Cafe', 'In banca', 'Pe banca', 'Patrula'],
     'Banca Cartele': [
       'Lifeinvader',
       'Residence',
@@ -463,6 +472,7 @@ test('listele de bănci înlocuiesc Banca cu In banca și Pe banca', () => {
       'In banca',
       'Pe banca',
       'Supraetajata Banca',
+      'Patrula',
     ],
     'Banca Pillbox': [
       'In banca',
@@ -475,6 +485,7 @@ test('listele de bănci înlocuiesc Banca cu In banca și Pe banca', () => {
       'Hotel',
       'Principala',
       'Secundara',
+      'Patrula',
     ],
     'Banca Highway': [
       'Magazin',
@@ -485,6 +496,7 @@ test('listele de bănci înlocuiesc Banca cu In banca și Pe banca', () => {
       'Guvid',
       'Principala',
       'Secundara',
+      'Patrula',
     ],
   };
 
@@ -492,6 +504,8 @@ test('listele de bănci înlocuiesc Banca cu In banca și Pe banca', () => {
     assert.deepEqual(bank.positions, expected[bank.name]);
     assert.ok(bank.positions.includes('In banca'));
     assert.ok(bank.positions.includes('Pe banca'));
+    assert.ok(bank.positions.includes('Patrula'));
+    assert.equal(bank.positions.at(-1), 'Patrula');
     assert.ok(!bank.positions.includes('Banca'));
     assert.ok(bank.positions.includes('In banca') && bank.positions.includes('Pe banca'));
   }
@@ -516,6 +530,7 @@ test('evenimentele vechi cu poziția Banca rămân afișate ca Banca', () => {
     positions: { u1: { name: 'Vlad', position: 'Banca' } },
     absences: {},
   });
+  assert.match(sections, /Total: 1/);
   assert.match(sections, /Banca:\nVlad/);
   assert.doesNotMatch(sections, /In banca/);
   assert.doesNotMatch(sections, /Pe banca/);
@@ -637,4 +652,132 @@ test('rezultatul de bancă: ultima apăsare rămâne și butoanele cer staff', (
   assert.equal(authorizeStaff(outsider, env).message, 'Nu ai rolul necesar pentru comanda asta.');
   assert.equal(authorizeCommand('banca', outsider, env).message, 'Nu ai rolul necesar pentru comanda asta.');
   assert.equal(authorizeStaff(outsider, {}).message, 'Lista de roluri nu este configurată pe bot.');
+});
+
+test('isClosed: banca cu rezultat se închide imediat; planifica doar la final de zi', () => {
+  const now = new Date('2026-09-23T17:00:00.000Z');
+  const today = parseBucharestDateTime('23.09.2026', '20:00').date.toISOString();
+  const yesterday = parseBucharestDateTime('22.09.2026', '20:00').date.toISOString();
+
+  assert.equal(isClosed({ tip: 'Cayo', at: today }, now), false);
+  assert.equal(isClosed({ tip: 'Cayo', at: yesterday }, now), true);
+  assert.equal(isClosed({ tip: 'banca', at: today }, now), false);
+  assert.equal(isClosed({ tip: 'banca', at: today, result: 'luata' }, now), true);
+  assert.equal(isClosed({ tip: 'banca', at: today, result: 'pierduta' }, now), true);
+  assert.equal(isClosed({ tip: 'banca', at: yesterday }, now), true);
+  assert.equal(isClosed(null, now), false);
+});
+
+test('rezultatul de bancă închide votul de poziție; expirarea închide planifica; absent rămâne permis', () => {
+  const today = parseBucharestDateTime('23.09.2026', '20:00').date.toISOString();
+  const now = new Date('2026-09-23T17:30:00.000Z');
+
+  const planifica = {
+    id: 'p-open',
+    tip: 'Cayo',
+    titlu: 'Cayo',
+    at: today,
+    attendees: { u1: { displayName: 'Vlad' } },
+    absences: {},
+  };
+  const stillOpen = applyPresent(planifica, 'u2', 'Madalin', undefined, now);
+  assert.equal(stillOpen.ok, true);
+  assert.equal(stillOpen.action.attendees.u2.displayName, 'Madalin');
+
+  const bank = {
+    id: 'b-close',
+    tip: 'banca',
+    bankName: 'Banca Dusty',
+    at: today,
+    positionNames: BANKS.find(item => item.name === 'Banca Dusty').positions,
+    positions: { u1: { name: 'Vlad', position: 'In banca' } },
+    absences: {},
+  };
+  const openPos = applyPosition(bank, 'u2', 'Madalin', 'Patrula', undefined, now);
+  assert.equal(openPos.ok, true);
+  assert.equal(openPos.action.positions.u2.position, 'Patrula');
+  assert.equal(positionTotal(openPos.action), 2);
+  assert.equal(formatPositionTotal(openPos.action), 'Total: 2');
+
+  const closed = applyResult(openPos.action, 'luata');
+  assert.equal(closed.ok, true);
+  assert.equal(isClosed(closed.action, now), true);
+
+  const blocked = applyPosition(closed.action, 'u3', 'Alex', 'Pe banca', undefined, now);
+  assert.equal(blocked.ok, false);
+  assert.equal(blocked.code, 'expired');
+  assert.equal(blocked.message, 'Acțiunea s-a încheiat. Nu mai poți schimba poziția.');
+  assert.equal(blocked.action.positions.u3, undefined);
+  assert.equal(positionTotal(blocked.action), 2);
+
+  const switched = applyResult(closed.action, 'pierduta');
+  assert.equal(switched.ok, true);
+  assert.equal(switched.action.result, 'pierduta');
+  const stillBlocked = applyPosition(switched.action, 'u3', 'Alex', 'Pe banca', undefined, now);
+  assert.equal(stillBlocked.ok, false);
+  assert.equal(stillBlocked.code, 'expired');
+  assert.equal(stillBlocked.message, 'Acțiunea s-a încheiat. Nu mai poți schimba poziția.');
+
+  const absent = applyAbsent(closed.action, 'u1', 'Vlad');
+  assert.equal(absent.ok, true);
+  assert.equal(absent.action.positions.u1, undefined);
+  assert.equal(absent.action.absences.u1.displayName, 'Vlad');
+  assert.equal(positionTotal(absent.action), 1);
+  assert.equal(formatPositionTotal(absent.action), 'Total: 1');
+
+  const nextDay = new Date('2026-09-23T21:00:00.000Z');
+  const expiredPlanifica = applyPresent(planifica, 'u3', 'Alex', undefined, nextDay);
+  assert.equal(expiredPlanifica.ok, false);
+  assert.equal(expiredPlanifica.code, 'expired');
+  assert.equal(expiredPlanifica.message, 'Acțiunea s-a încheiat. Nu mai poți vota prezent.');
+});
+
+test('istoricul rezultate-banci persistă după reset_actiuni și ultima apăsare înlocuiește scorul', () => {
+  assert.equal(formatBankResults({}), 'Castigate: 0 | Pierdute: 0');
+  assert.equal(formatBankResults(), 'Castigate: 0 | Pierdute: 0');
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'actiuni-'));
+  const store = createStore(path.join(dir, 'actiuni.json'));
+  const results = createBankResultsStore(path.join(dir, 'bank-results.json'));
+
+  assert.equal(results.formatTotals(), 'Castigate: 0 | Pierdute: 0');
+
+  const win = store.createAction({
+    tip: 'banca',
+    bankName: 'Banca Dusty',
+    titlu: 'Banca Dusty',
+    positionNames: BANKS.find(item => item.name === 'Banca Dusty').positions,
+    at: '2026-12-31T19:00:00.000Z',
+    dateLabel: '31.12.2026',
+    dateTimeLabel: '31.12.2026 21:00',
+  });
+  const loss = store.createAction({
+    tip: 'banca',
+    bankName: 'Banca Highway',
+    titlu: 'Banca Highway',
+    positionNames: BANKS.find(item => item.name === 'Banca Highway').positions,
+    at: '2026-12-31T20:00:00.000Z',
+    dateLabel: '31.12.2026',
+    dateTimeLabel: '31.12.2026 22:00',
+  });
+
+  assert.equal(store.markResult(win.id, 'luata').ok, true);
+  assert.equal(results.upsert(win.id, 'luata').ok, true);
+  assert.equal(store.markResult(loss.id, 'pierduta').ok, true);
+  assert.equal(results.upsert(loss.id, 'pierduta').ok, true);
+  assert.equal(results.formatTotals(), 'Castigate: 1 | Pierdute: 1');
+
+  store.reset(new Date('2026-09-28T17:01:00.000Z'));
+  assert.equal(store.getState().actions.length, 0);
+  assert.equal(store.getAction(win.id), null);
+  assert.equal(results.formatTotals(), 'Castigate: 1 | Pierdute: 1');
+  assert.equal(results.getState()[win.id], 'luata');
+  assert.equal(results.getState()[loss.id], 'pierduta');
+
+  const switched = createBankResultsStore(path.join(dir, 'switch.json'));
+  assert.equal(switched.upsert('e1', 'luata').ok, true);
+  assert.equal(switched.formatTotals(), 'Castigate: 1 | Pierdute: 0');
+  assert.equal(switched.upsert('e1', 'pierduta').ok, true);
+  assert.equal(switched.formatTotals(), 'Castigate: 0 | Pierdute: 1');
+  assert.equal(Object.keys(switched.getState()).length, 1);
 });

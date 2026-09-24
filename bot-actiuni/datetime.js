@@ -122,10 +122,17 @@ function isExpired(startsAt, now = new Date()) {
   return calendarDayKey(current) > calendarDayKey(start);
 }
 
+function isClosed(action, now = new Date()) {
+  if (!action) return false;
+  if (isExpired(action.at, now)) return true;
+  return action.tip === 'banca' && Boolean(action.result);
+}
+
 module.exports = {
   TIMEZONE,
   formatBucharest,
   formatBucharestDate,
   parseBucharestDateTime,
   isExpired,
+  isClosed,
 };

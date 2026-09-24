@@ -1,4 +1,4 @@
-const { formatBucharest, isExpired } = require('./datetime');
+const { formatBucharest, isExpired, isClosed } = require('./datetime');
 const { actionChoiceLabel, bankPositionNames, bancaResultLabel } = require('./validation');
 
 const ATTENDANCE_MESSAGES = {
@@ -73,7 +73,7 @@ function applyPosition(action, userId, displayName, position, at = new Date().to
   }
   const id = String(userId || '').trim();
   if (!id) return { ok: false, code: 'user', message: 'Nu am putut identifica utilizatorul Discord.' };
-  if (isExpired(action.at, now)) {
+  if (isClosed(action, now)) {
     return { ok: false, code: 'expired', message: ATTENDANCE_MESSAGES.expired_position, action: cloneAction(action) };
   }
   if (action.absences?.[id]) {
@@ -146,6 +146,14 @@ function formatAttendanceSections(action) {
   return sections.join('\n\n');
 }
 
+function positionTotal(action) {
+  return Object.keys(action?.positions || {}).length;
+}
+
+function formatPositionTotal(action) {
+  return `Total: ${positionTotal(action)}`;
+}
+
 function groupPositions(action) {
   const names = bankPositionNames(action);
   const groups = Object.fromEntries(names.map(pos => [pos, []]));
@@ -160,10 +168,11 @@ function groupPositions(action) {
 
 function formatPositionSections(action) {
   const { positions, groups } = groupPositions(action);
-  const sections = positions.map(pos => {
+  const sections = [formatPositionTotal(action)];
+  sections.push(...positions.map(pos => {
     const names = groups[pos] || [];
     return `${pos}:\n${names.length ? names.join(', ') : '—'}`;
-  });
+  }));
   const absents = absentNames(action);
   if (absents.length) {
     sections.push(`Absenți (${absents.length}):\n${absents.join(', ')}`);
@@ -211,7 +220,9 @@ function formatListaActiuni(state, now = new Date()) {
   const header = `În intervalul ${formatBucharest(start)} - ${formatBucharest(end)}${note ? ` (${note})` : ''}:`;
   const people = new Map();
 
-  const actions = [...(state?.actions || [])].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+  const actions = [...(state?.actions || [])]
+    .filter(action => action?.tip !== 'banca')
+    .sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
   for (const action of actions) {
     const label = actionChoiceLabel(action);
     for (const [userId, info] of Object.entries(actionSignups(action))) {
@@ -272,6 +283,8 @@ module.exports = {
   presentNames,
   absentNames,
   formatAttendanceSections,
+  positionTotal,
+  formatPositionTotal,
   groupPositions,
   formatPositionSections,
   oldestActionTime,

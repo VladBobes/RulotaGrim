@@ -4,6 +4,7 @@ const COMMAND_ROLE_ENV = {
   absent: 'STAFF_ROLE_IDS',
   reset_actiuni: 'STAFF_ROLE_IDS',
   lista_actiuni: 'STAFF_ROLE_IDS',
+  'rezultate-banci': 'STAFF_ROLE_IDS',
 };
 
 const MESSAGES = {
