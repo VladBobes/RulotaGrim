@@ -24,8 +24,6 @@ const BANKS = [
       'Jumper',
       'Hotdog',
       'Gunshop',
-      'Principala',
-      'Secundara',
       'Laterala',
       'Patrula',
     ],
@@ -46,14 +44,12 @@ const BANKS = [
       'Vent',
       'Market',
       'Hotel',
-      'Principala',
-      'Secundara',
       'Patrula',
     ],
   },
   {
     name: 'Banca Highway',
-    positions: ['Magazin', 'Surf', 'In banca', 'Pe banca', 'Cladire Secundara', 'Guvid', 'Principala', 'Secundara', 'Patrula'],
+    positions: ['Magazin', 'Surf', 'In banca', 'Pe banca', 'Cladire Secundara', 'Guvid', 'Patrula'],
   },
 ];
 

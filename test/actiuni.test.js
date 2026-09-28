@@ -545,8 +545,6 @@ test('listele de bănci înlocuiesc Banca cu In banca și Pe banca', () => {
       'Jumper',
       'Hotdog',
       'Gunshop',
-      'Principala',
-      'Secundara',
       'Laterala',
       'Patrula',
     ],
@@ -570,8 +568,6 @@ test('listele de bănci înlocuiesc Banca cu In banca și Pe banca', () => {
       'Vent',
       'Market',
       'Hotel',
-      'Principala',
-      'Secundara',
       'Patrula',
     ],
     'Banca Highway': [
@@ -581,8 +577,6 @@ test('listele de bănci înlocuiesc Banca cu In banca și Pe banca', () => {
       'Pe banca',
       'Cladire Secundara',
       'Guvid',
-      'Principala',
-      'Secundara',
       'Patrula',
     ],
   };
@@ -594,6 +588,8 @@ test('listele de bănci înlocuiesc Banca cu In banca și Pe banca', () => {
     assert.ok(bank.positions.includes('Patrula'));
     assert.equal(bank.positions.at(-1), 'Patrula');
     assert.ok(!bank.positions.includes('Banca'));
+    assert.ok(!bank.positions.includes('Principala'));
+    assert.ok(!bank.positions.includes('Secundara'));
     assert.ok(bank.positions.includes('In banca') && bank.positions.includes('Pe banca'));
   }
 
