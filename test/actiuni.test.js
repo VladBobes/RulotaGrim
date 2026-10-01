@@ -22,6 +22,7 @@ const {
   applyPosition,
   applyResult,
   applyAbsent,
+  applyUndoAbsent,
   formatListaActiuni,
   formatAttendanceSections,
   formatPositionSections,
@@ -147,6 +148,51 @@ test('prezența: un vot, al doilea ignorat, absent mută utilizatorul', () => {
   assert.equal(expired.message, 'Acțiunea nu mai este activă.');
 });
 
+test('anulează absent: readuce utilizatorul la prezenți și permite absența din nou', () => {
+  const action = {
+    id: 'a1',
+    tip: 'Cayo',
+    titlu: 'Cayo',
+    dateLabel: '23.09.2026',
+    attendees: {},
+    absences: {},
+  };
+
+  const first = applyPresent(action, 'u1', 'Vlad');
+  const absent = applyAbsent(first.action, 'u1', 'Vlad');
+  assert.equal(absent.ok, true);
+  assert.equal(absent.action.attendees.u1, undefined);
+  assert.equal(absent.action.absences.u1.displayName, 'Vlad');
+
+  const never = applyUndoAbsent(first.action, 'u1', 'Vlad');
+  assert.equal(never.ok, false);
+  assert.equal(never.code, 'not_absent');
+  assert.equal(never.message, 'Utilizatorul nu este marcat absent la acțiunea asta.');
+  assert.equal(never.action.absences.u1, undefined);
+  assert.equal(never.action.attendees.u1.displayName, 'Vlad');
+
+  const unknown = applyUndoAbsent(absent.action, 'u2', 'Madalin');
+  assert.equal(unknown.ok, false);
+  assert.equal(unknown.code, 'not_absent');
+  assert.equal(unknown.message, 'Utilizatorul nu este marcat absent la acțiunea asta.');
+  assert.equal(unknown.action.absences.u1.displayName, 'Vlad');
+
+  const undone = applyUndoAbsent(absent.action, 'u1', 'Vlad');
+  assert.equal(undone.ok, true);
+  assert.equal(undone.action.absences.u1, undefined);
+  assert.equal(Object.keys(undone.action.absences).length, 0);
+  assert.equal(undone.action.attendees.u1.displayName, 'Vlad');
+
+  const again = applyAbsent(undone.action, 'u1', 'Vlad');
+  assert.equal(again.ok, true);
+  assert.equal(again.action.attendees.u1, undefined);
+  assert.equal(again.action.absences.u1.displayName, 'Vlad');
+
+  const inactive = applyUndoAbsent(null, 'u1', 'Vlad');
+  assert.equal(inactive.ok, false);
+  assert.equal(inactive.message, 'Acțiunea nu mai este activă.');
+});
+
 test('store persistă acțiuni, refuză votul dublu și expiră după reset', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'actiuni-'));
   const store = createStore(path.join(dir, 'actiuni.json'));
@@ -170,6 +216,13 @@ test('store persistă acțiuni, refuză votul dublu și expiră după reset', ()
   assert.equal(moved.ok, true);
   assert.equal(store.getAction(created.id).absences.u1.displayName, 'Vlad');
   assert.equal(store.getAction(created.id).attendees.u1, undefined);
+
+  const restored = store.undoAbsent(created.id, 'u1', 'Vlad');
+  assert.equal(restored.ok, true);
+  assert.equal(store.getAction(created.id).attendees.u1.displayName, 'Vlad');
+  assert.equal(store.getAction(created.id).absences.u1, undefined);
+  assert.equal(store.undoAbsent(created.id, 'u1', 'Vlad').code, 'not_absent');
+  assert.equal(store.markAbsent(created.id, 'u1', 'Vlad').ok, true);
 
   const resetAt = new Date('2026-09-28T17:01:00.000Z');
   const reset = store.reset(resetAt);
@@ -238,6 +291,53 @@ test('formatterul de listă păstrează intervalul, numără doar prezenții și
   assert.match(noReset, /fără reset anterior/);
 });
 
+test('anulează absent: formatterul de listă nu mai arată absența și readuce prezența', () => {
+  const maldive = {
+    tip: 'Maldive',
+    titlu: 'Maldive',
+    dateLabel: '24.09.2026',
+    at: '2026-09-24T17:00:00.000Z',
+    attendees: { madalin: { displayName: 'Madalin' } },
+    absences: { vlad: { displayName: 'Vlad' } },
+  };
+  const restored = applyUndoAbsent(maldive, 'vlad', 'Vlad');
+  assert.equal(restored.ok, true);
+  assert.equal(restored.action.absences.vlad, undefined);
+  assert.equal(restored.action.attendees.vlad.displayName, 'Vlad');
+  assert.equal(restored.action.attendees.madalin.displayName, 'Madalin');
+
+  const sections = formatAttendanceSections(restored.action);
+  assert.equal(sections, 'Prezenți (2):\nMadalin, Vlad');
+  assert.doesNotMatch(sections, /Absenți/);
+  assert.doesNotMatch(sections, /absență/);
+
+  const state = {
+    lastResetAt: '2026-09-22T16:59:00.000Z',
+    actions: [
+      {
+        tip: 'Cayo',
+        titlu: 'Cayo',
+        dateLabel: '23.09.2026',
+        at: '2026-09-23T17:00:00.000Z',
+        attendees: { vlad: { displayName: 'Vlad' } },
+        absences: {},
+      },
+      restored.action,
+    ],
+  };
+  const text = formatListaActiuni(state, new Date('2026-09-28T17:01:00.000Z'));
+  assert.equal(
+    text,
+    [
+      'În intervalul 22.09.2026 19:59 - 28.09.2026 20:01:',
+      'Vlad - 2 acțiuni (Cayo 23.09.2026, Maldive 24.09.2026)',
+      'Madalin - 1 acțiune (Maldive 24.09.2026)',
+    ].join('\n')
+  );
+  assert.doesNotMatch(text, /absență/);
+  assert.doesNotMatch(text, /absențe/);
+});
+
 test('secțiunile de prezență rămân pe mesaj și textul lung se taie la 2000 de caractere', () => {
   const empty = formatAttendanceSections({ attendees: {}, absences: {} });
   assert.equal(empty, 'Prezenți (0):\nnimeni încă');
@@ -262,6 +362,9 @@ test('verificarea de rol refuză configurația goală cu același mesaj', () => 
   assert.equal(empty.message, 'Lista de roluri nu este configurată pe bot.');
   assert.equal(authorizeCommand('lista_actiuni', member, { STAFF_ROLE_IDS: '  , ' }).code, 'unconfigured');
   assert.equal(authorizeCommand('absent', member, { STAFF_ROLE_IDS: '999' }).message, 'Nu ai rolul necesar pentru comanda asta.');
+  assert.equal(authorizeCommand('anuleaza_absent', member, { STAFF_ROLE_IDS: '999' }).message, 'Nu ai rolul necesar pentru comanda asta.');
+  assert.equal(authorizeCommand('anuleaza_absent', member, {}).message, 'Lista de roluri nu este configurată pe bot.');
+  assert.equal(authorizeCommand('anuleaza_absent', { roles: ['999'] }, { STAFF_ROLE_IDS: '999' }).ok, true);
   assert.equal(authorizeCommand('banca', member, { STAFF_ROLE_IDS: '999' }).message, 'Nu ai rolul necesar pentru comanda asta.');
   assert.equal(authorizeCommand('banca', { roles: ['999'] }, { STAFF_ROLE_IDS: '999' }).ok, true);
   assert.equal(authorizeCommand('reset_actiuni', { roles: ['999'] }, { STAFF_ROLE_IDS: '999' }).ok, true);

@@ -272,6 +272,26 @@ async function handleAbsent(interaction) {
   });
 }
 
+async function handleAnuleazaAbsent(interaction) {
+  const user = interaction.options.getUser('utilizator', true);
+  const actionId = interaction.options.getString('actiune', true);
+  const blocked = validateAbsentTarget(store.getAction(actionId));
+  if (!blocked.ok) {
+    await interaction.reply({ content: blocked.message, ephemeral: true });
+    return;
+  }
+  const result = store.undoAbsent(actionId, user.id, targetDisplayName(interaction));
+  if (!result.ok) {
+    await interaction.reply({ content: result.message, ephemeral: true });
+    return;
+  }
+  await editActionMessage(result.action);
+  await interaction.reply({
+    content: `${targetDisplayName(interaction)} nu mai este marcat absent la ${actionChoiceLabel(result.action)}.`,
+    ephemeral: true,
+  });
+}
+
 async function handleReset(interaction) {
   const result = store.reset(new Date());
   await interaction.reply(`Istoricul de prezență a fost șters. Ultimul reset: ${formatBucharest(new Date(result.lastResetAt))}.`);
@@ -354,7 +374,7 @@ client.on(Events.InteractionCreate, async interaction => {
         await interaction.respond([]);
         return;
       }
-      if (interaction.commandName === 'absent') {
+      if (interaction.commandName === 'absent' || interaction.commandName === 'anuleaza_absent') {
         await interaction.respond(
           recentActions(interaction.options.getFocused()).map(action => ({
             name: actionChoiceLabel(action).slice(0, 100),
@@ -392,6 +412,7 @@ client.on(Events.InteractionCreate, async interaction => {
     if (interaction.commandName === 'planifica') await handlePlanifica(interaction);
     else if (interaction.commandName === 'banca') await handleBanca(interaction);
     else if (interaction.commandName === 'absent') await handleAbsent(interaction);
+    else if (interaction.commandName === 'anuleaza_absent') await handleAnuleazaAbsent(interaction);
     else if (interaction.commandName === 'reset_actiuni') await handleReset(interaction);
     else if (interaction.commandName === 'lista_actiuni') await handleLista(interaction);
     else if (interaction.commandName === 'rezultate-banci') await handleRezultateBanci(interaction);

@@ -7,6 +7,7 @@ const ATTENDANCE_MESSAGES = {
   marked_absent: 'Ai fost marcat absent la acțiunea asta.',
   never_present: 'Utilizatorul nu s-a înscris la acțiunea asta.',
   already_absent: 'Utilizatorul este deja marcat absent la acțiunea asta.',
+  not_absent: 'Utilizatorul nu este marcat absent la acțiunea asta.',
   expired_present: 'Acțiunea s-a încheiat. Nu mai poți vota prezent.',
   expired_position: 'Acțiunea s-a încheiat. Nu mai poți schimba poziția.',
   invalid_result: 'Rezultat invalid.',
@@ -124,6 +125,24 @@ function applyAbsent(action, userId, displayName, at = new Date().toISOString())
   if (next.attendees?.[id]) delete next.attendees[id];
   if (next.positions?.[id]) delete next.positions[id];
   next.absences[id] = { displayName: keptName, at };
+  return { ok: true, action: next };
+}
+
+function applyUndoAbsent(action, userId, displayName, at = new Date().toISOString()) {
+  if (!action) return { ok: false, code: 'inactive', message: ATTENDANCE_MESSAGES.inactive };
+  const id = String(userId || '').trim();
+  if (!id) return { ok: false, code: 'user', message: 'Nu am putut identifica utilizatorul Discord.' };
+  const absence = action.absences?.[id];
+  if (!absence) {
+    return { ok: false, code: 'not_absent', message: ATTENDANCE_MESSAGES.not_absent, action: cloneAction(action) };
+  }
+  const next = cloneAction(action);
+  const keptName = signupName(absence) || String(displayName || '').trim() || id;
+  delete next.absences[id];
+  next.attendees[id] = {
+    displayName: keptName,
+    at,
+  };
   return { ok: true, action: next };
 }
 
@@ -280,6 +299,7 @@ module.exports = {
   applyPosition,
   applyResult,
   applyAbsent,
+  applyUndoAbsent,
   presentNames,
   absentNames,
   formatAttendanceSections,

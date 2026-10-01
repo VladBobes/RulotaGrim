@@ -85,6 +85,24 @@ const absent = new SlashCommandBuilder()
       .setAutocomplete(true)
   );
 
+const anuleazaAbsent = new SlashCommandBuilder()
+  .setName('anuleaza_absent')
+  .setDescription('Anulează o absență greșită și readuce membrul la prezenți')
+  .setDMPermission(false)
+  .addUserOption(option =>
+    option
+      .setName('utilizator')
+      .setDescription('Membrul marcat absent din greșeală')
+      .setRequired(true)
+  )
+  .addStringOption(option =>
+    option
+      .setName('actiune')
+      .setDescription('Acțiunea recentă')
+      .setRequired(true)
+      .setAutocomplete(true)
+  );
+
 const resetActiuni = new SlashCommandBuilder()
   .setName('reset_actiuni')
   .setDescription('Șterge istoricul de prezență și închide acțiunile vechi')
@@ -100,6 +118,6 @@ const rezultateBanci = new SlashCommandBuilder()
   .setDescription('Arată istoricul băncilor câștigate și pierdute')
   .setDMPermission(false);
 
-const commands = [planifica, banca, absent, resetActiuni, listaActiuni, rezultateBanci];
+const commands = [planifica, banca, absent, anuleazaAbsent, resetActiuni, listaActiuni, rezultateBanci];
 
 module.exports = { commands };

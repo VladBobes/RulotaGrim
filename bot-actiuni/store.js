@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { applyAbsent, applyPosition, applyPresent, applyResult } = require('./attendance');
+const { applyAbsent, applyPosition, applyPresent, applyResult, applyUndoAbsent } = require('./attendance');
 
 function emptyState() {
   return { lastResetAt: null, actions: [] };
@@ -114,6 +114,12 @@ function createStore(filePath) {
     return replaceAction(result.action);
   }
 
+  function undoAbsent(id, userId, displayName, at) {
+    const result = applyUndoAbsent(getAction(id), userId, displayName, at);
+    if (!result.ok) return result;
+    return replaceAction(result.action);
+  }
+
   function markResult(id, outcome) {
     const result = applyResult(getAction(id), outcome);
     if (!result.ok) return result;
@@ -138,6 +144,7 @@ function createStore(filePath) {
     markPresent,
     markPosition,
     markAbsent,
+    undoAbsent,
     markResult,
     reset,
     getState,

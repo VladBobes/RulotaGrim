@@ -23,7 +23,7 @@ Pe rolul botului trebuie bifat **Mention Everyone**. Fără asta, `@everyone` ap
 cp bot-actiuni/.env.example bot-actiuni/.env
 ```
 
-Completează `DISCORD_TOKEN`, `DISCORD_CLIENT_ID` și `DISCORD_GUILD_ID` (ID-ul serverului) din a doua aplicație. Copiază `STAFF_ROLE_IDS` din `bot/.env` — aceleași ID-uri de rol, separate prin virgulă. Acest bot nu folosește `PREDARE_ROLE_IDS`.
+Completează `DISCORD_TOKEN`, `DISCORD_CLIENT_ID` și `DISCORD_GUILD_ID` (ID-ul serverului) din a doua aplicație. Copiază `STAFF_ROLE_IDS` din `bot/.env` — mai multe ID-uri de rol, separate prin virgulă. Acest bot nu folosește `PREDARE_ROLE_IDS`.
 
 Datele stau în `bot-actiuni/data/` (nu se comite). Tokenul stă doar în `bot-actiuni/.env` (nu se comite).
 
@@ -32,6 +32,7 @@ Datele stau în `bot-actiuni/data/` (nu se comite). Tokenul stă doar în `bot-a
 - `/planifica` — anunță o acțiune, menționează `@everyone` și deschide butonul Prezent.
 - `/banca` — anunță o bancă, menționează `@everyone` și deschide butoanele de poziție.
 - `/absent` — mută un membru din prezenți / de pe poziție în absenți.
+- `/anuleaza_absent` — scoate un membru din absenți la o acțiune `/planifica` și îl pune înapoi la prezenți.
 - `/lista_actiuni` — prezența de la `/planifica` de la ultimul reset (fără bănci).
 - `/rezultate-banci` — istoricul băncilor câștigate și pierdute; nu se șterge la reset.
 - `/reset_actiuni` — șterge istoricul de prezență; butoanele vechi nu mai funcționează.
