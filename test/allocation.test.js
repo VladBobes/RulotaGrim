@@ -132,3 +132,107 @@ test('predările se înlocuiesc pe user și refuză CNP duplicat', () => {
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
+
+function qtyMap(overrides) {
+  return {
+    plicCocaina: 0,
+    joint: 0,
+    tigara: 0,
+    redFire: 0,
+    greenHaze: 0,
+    blueCurrent: 0,
+    ...overrides,
+  };
+}
+
+function byName(allocations, name) {
+  return allocations.find(player => player.name === name);
+}
+
+test('cererile mici de coca se umplu înainte să fie tăiați jucătorii mari (Sandy)', () => {
+  const sandyPlayers = [
+    { name: 'Maya', cnp: '139', quantities: qtyMap({ plicCocaina: 600 }) },
+    {
+      name: 'Bobe',
+      cnp: '19723',
+      quantities: qtyMap({
+        plicCocaina: 770,
+        joint: 212,
+        tigara: 115,
+        redFire: 66,
+        greenHaze: 377,
+        blueCurrent: 254,
+      }),
+    },
+    {
+      name: 'Tavi',
+      cnp: '19752',
+      quantities: qtyMap({
+        plicCocaina: 770,
+        joint: 213,
+        tigara: 116,
+        redFire: 66,
+        greenHaze: 377,
+        blueCurrent: 254,
+      }),
+    },
+    { name: 'SuperMan', cnp: '18259', quantities: qtyMap({ plicCocaina: 640, greenHaze: 251, blueCurrent: 296 }) },
+    { name: 'TheBumTzy', cnp: '11596', quantities: qtyMap({ greenHaze: 100 }) },
+    { name: 'Coama', cnp: '2444', quantities: qtyMap({ plicCocaina: 100 }) },
+    { name: 'Pokerashu', cnp: '27', quantities: qtyMap({ plicCocaina: 100, joint: 150 }) },
+    { name: 'Rey', cnp: '18429', quantities: qtyMap({ tigara: 300, redFire: 190, greenHaze: 137, blueCurrent: 34 }) },
+    { name: 'MrFalky', cnp: '15129', quantities: qtyMap({ plicCocaina: 100 }) },
+    { name: 'Ion', cnp: '29079', quantities: qtyMap({ plicCocaina: 100 }) },
+    { name: 'KENITH', cnp: '4461', quantities: qtyMap({ plicCocaina: 200 }) },
+    { name: 'clau', cnp: '23038', quantities: qtyMap({ plicCocaina: 99 }) },
+    { name: 'Duzi', cnp: '12947', quantities: qtyMap({ plicCocaina: 100 }) },
+    { name: 'AlexandruSusta', cnp: '18178', quantities: qtyMap({ joint: 101 }) },
+  ];
+
+  const result = calculateDelivery(sandyPlayers, preset('sandy').capacities);
+  const maya = byName(result.allocations, 'Maya');
+  const ion = byName(result.allocations, 'Ion');
+  const duzi = byName(result.allocations, 'Duzi');
+  const kenith = byName(result.allocations, 'KENITH');
+  const bobe = byName(result.allocations, 'Bobe');
+  const coama = byName(result.allocations, 'Coama');
+  const falky = byName(result.allocations, 'MrFalky');
+  const clau = byName(result.allocations, 'clau');
+
+  assert.ok(ion.maxValue <= ion.targetValue + 1);
+  assert.ok(duzi.maxValue <= duzi.targetValue + 1);
+  assert.ok(kenith.maxValue <= kenith.targetValue + 1);
+  assert.ok(coama.maxValue <= coama.targetValue + 1);
+  assert.ok(falky.maxValue <= falky.targetValue + 1);
+  assert.ok(clau.maxValue <= clau.targetValue + 1);
+  assert.ok(maya.maxValue > maya.targetValue + 1);
+  assert.ok(bobe.maxValue > bobe.targetValue + 1);
+
+  assert.equal(ion.allocated.plicCocaina, 100);
+  assert.equal(duzi.allocated.plicCocaina, 100);
+  assert.equal(kenith.allocated.plicCocaina, 200);
+  assert.equal(coama.allocated.plicCocaina, 100);
+  assert.equal(falky.allocated.plicCocaina, 100);
+  assert.equal(clau.allocated.plicCocaina, 99);
+  assert.ok(maya.allocated.plicCocaina < 600);
+  assert.notEqual(maya.allocated.plicCocaina, 330);
+
+  const totalCoca = allocatedTotal(result.allocations, 'plicCocaina');
+  const requestedCoca = sandyPlayers.reduce((sum, player) => sum + player.quantities.plicCocaina, 0);
+  assert.ok(requestedCoca >= 1000);
+  assert.equal(totalCoca, 1000);
+
+  const smallCoca = result.allocations
+    .filter(player => player.maxValue <= player.targetValue + 1)
+    .reduce((sum, player) => sum + (player.allocated.plicCocaina || 0), 0);
+  assert.ok(smallCoca < 1000);
+  assert.equal(
+    maya.allocated.plicCocaina + result.allocations
+      .filter(player => player.name !== 'Maya' && player.maxValue > player.targetValue + 1)
+      .reduce((sum, player) => sum + (player.allocated.plicCocaina || 0), 0),
+    1000 - smallCoca,
+  );
+
+  assert.ok((bobe.allocated.joint || 0) + (bobe.allocated.tigara || 0) + (bobe.allocated.redFire || 0)
+    + (bobe.allocated.greenHaze || 0) + (bobe.allocated.blueCurrent || 0) > 0);
+});

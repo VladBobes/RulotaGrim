@@ -482,6 +482,76 @@
     });
   }
 
+  function isSmallPlayer(player) {
+    return player.maxValue <= player.targetValue + 1;
+  }
+
+  function comparePlayersStable(a, b) {
+    const cnpCmp = String(a.cnp || '').localeCompare(String(b.cnp || ''), 'en', { numeric: true });
+    if (cnpCmp !== 0) return cnpCmp;
+    return String(a.name || '').localeCompare(String(b.name || ''), 'en');
+  }
+
+  function fillSmallPlayersFirst(allocations, itemSummaries) {
+    const small = allocations.filter(isSmallPlayer).sort(comparePlayersStable);
+    if (small.length === 0) return;
+
+    for (const summary of itemSummaries) {
+      const item = summary.item;
+      const used = allocations.reduce((sum, player) => sum + (player.allocated[item.key] || 0), 0);
+      const remaining = summary.deliverableQuantity - used;
+      if (remaining <= 0) continue;
+
+      const smallDemand = small.reduce((sum, player) => sum + (player.quantities[item.key] || 0), 0);
+      if (smallDemand <= 0) continue;
+
+      if (smallDemand <= remaining) {
+        for (const player of small) {
+          const want = player.quantities[item.key] || 0;
+          if (want <= 0) continue;
+          player.allocated[item.key] = (player.allocated[item.key] || 0) + want;
+        }
+      } else {
+        allocateItemGreedyAmongPlayers(small, item, remaining);
+      }
+    }
+  }
+
+  function allocateItemGreedyAmongPlayers(players, item, remaining) {
+    const revenues = players.map(player =>
+      items.reduce((sum, candidate) => sum + ((player.allocated[candidate.key] || 0) * candidate.price), 0)
+    );
+    let left = remaining;
+
+    while (left > 0) {
+      let bestPlayer = -1;
+      let bestScore = null;
+
+      for (let playerIndex = 0; playerIndex < players.length; playerIndex++) {
+        const requested = players[playerIndex].quantities[item.key] || 0;
+        if ((players[playerIndex].allocated[item.key] || 0) >= requested) continue;
+
+        const candidateRevenue = [...revenues];
+        candidateRevenue[playerIndex] += item.price;
+        const candidateScore = targetBalanceScore(candidateRevenue, players);
+
+        if (!bestScore || isBetterScore(candidateScore, bestScore)) {
+          bestScore = candidateScore;
+          bestPlayer = playerIndex;
+        } else if (scoreEquals(candidateScore, bestScore)) {
+          const currentDiff = Math.abs(players[playerIndex].targetValue - candidateRevenue[playerIndex]);
+          const bestDiff = Math.abs(players[bestPlayer].targetValue - (revenues[bestPlayer] + item.price));
+          if (currentDiff < bestDiff) bestPlayer = playerIndex;
+        }
+      }
+
+      if (bestPlayer === -1) break;
+      players[bestPlayer].allocated[item.key] = (players[bestPlayer].allocated[item.key] || 0) + 1;
+      revenues[bestPlayer] += item.price;
+      left -= 1;
+    }
+  }
+
   function calculateDelivery(playerList, capacities) {
     if (capacities) applyCapacities(capacities);
 
@@ -514,7 +584,33 @@
       p.targetValue = fairTargets[index];
     });
 
-    allocateBalancedByMoney(allocations, itemSummaries);
+    fillSmallPlayersFirst(allocations, itemSummaries);
+
+    const remainingSummaries = itemSummaries.map(summary => {
+      const used = allocations.reduce((sum, player) => sum + (player.allocated[summary.item.key] || 0), 0);
+      return {
+        ...summary,
+        deliverableQuantity: Math.max(0, summary.deliverableQuantity - used),
+      };
+    });
+
+    const remainingAllocations = allocations.map(player => ({
+      ...player,
+      quantities: Object.fromEntries(items.map(item => [
+        item.key,
+        Math.max(0, (player.quantities[item.key] || 0) - (player.allocated[item.key] || 0)),
+      ])),
+      allocated: Object.fromEntries(items.map(item => [item.key, 0])),
+    }));
+
+    allocateBalancedByMoney(remainingAllocations, remainingSummaries);
+
+    allocations.forEach((player, index) => {
+      items.forEach(item => {
+        player.allocated[item.key] =
+          (player.allocated[item.key] || 0) + (remainingAllocations[index].allocated[item.key] || 0);
+      });
+    });
 
     allocations.forEach(p => {
       p.revenue = items.reduce((sum, item) => sum + ((p.allocated[item.key] || 0) * item.price), 0);
