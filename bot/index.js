@@ -5,6 +5,7 @@ const { createStore } = require('./store');
 const { quantityFields } = require('./fields');
 const { authorizeCommand } = require('./roles');
 const { cleanPlayerName, formatPlayerLabel } = require('./player-label');
+const { publicListMessages } = require('./list-message');
 const {
   items,
   GROVE_CAPS,
@@ -60,37 +61,15 @@ function readCustomCapacities(interaction) {
   return caps;
 }
 
-function chunkText(text, limit = 1900) {
-  if (text.length <= limit) return [text];
-  const parts = [];
-  let current = '';
-  for (const block of text.split('\n\n')) {
-    const next = current ? `${current}\n\n${block}` : block;
-    if (next.length <= limit) {
-      current = next;
-      continue;
-    }
-    if (current) parts.push(current);
-    if (block.length <= limit) {
-      current = block;
-      continue;
-    }
-    for (let i = 0; i < block.length; i += limit) parts.push(block.slice(i, i + limit));
-    current = '';
-  }
-  if (current) parts.push(current);
-  return parts;
-}
-
 async function sendText(interaction, text) {
-  const chunks = chunkText(text);
+  const payloads = publicListMessages(text);
   if (!interaction.deferred && !interaction.replied) {
-    await interaction.reply({ content: chunks[0] });
+    await interaction.reply(payloads[0]);
   } else {
-    await interaction.editReply({ content: chunks[0] });
+    await interaction.editReply(payloads[0]);
   }
-  for (let i = 1; i < chunks.length; i += 1) {
-    await interaction.followUp({ content: chunks[i] });
+  for (let i = 1; i < payloads.length; i += 1) {
+    await interaction.followUp(payloads[i]);
   }
 }
 
