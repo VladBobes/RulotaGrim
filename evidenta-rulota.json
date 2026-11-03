@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-11-03T09:48:19.566Z",
+  "updatedAt": "2026-11-03T09:48:54.352Z",
   "entries": [
     {
       "id": "mw0i7psw-zmesh713",
@@ -24,15 +24,31 @@
       "cnp": "1000",
       "telefon": "000-0001",
       "quantities": {
-        "plicCocaina": 50,
+        "plicCocaina": 0,
         "joint": 0,
         "tigara": 0,
         "redFire": 0,
         "greenHaze": 0,
-        "blueCurrent": 50
+        "blueCurrent": 0
       },
       "taxCollected": false,
       "createdAt": "2026-11-03T09:48:19.565Z"
+    },
+    {
+      "id": "mw0i9rxr-xed1g574",
+      "responsabil": "1241",
+      "cnp": "124",
+      "telefon": "1241",
+      "quantities": {
+        "plicCocaina": 23412,
+        "joint": 124,
+        "tigara": 0,
+        "redFire": 0,
+        "greenHaze": 0,
+        "blueCurrent": 0
+      },
+      "taxCollected": false,
+      "createdAt": "2026-11-03T09:48:54.063Z"
     }
   ]
 }
