@@ -111,20 +111,39 @@
     return Boolean(config && String(config.token || '').trim());
   }
 
-  function contentsUrl(config) {
+  function contentsUrl(config, options) {
     const path = encodeURIComponent(config.path).replace(/%2F/g, '/');
-    return `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${path}?ref=${encodeURIComponent(config.branch)}`;
+    const base = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${path}`;
+    if (options && options.forWrite) return base;
+    const bust = options && options.cacheBust != null ? options.cacheBust : Date.now();
+    return `${base}?ref=${encodeURIComponent(config.branch)}&_=${encodeURIComponent(String(bust))}`;
   }
 
   function authHeaders(config, extra) {
     const headers = {
       Accept: 'application/vnd.github+json',
       'X-GitHub-Api-Version': '2022-11-28',
+      'Cache-Control': 'no-cache',
+      Pragma: 'no-cache',
       ...(extra || {}),
     };
     const token = String((config && config.token) || '').trim();
     if (token) headers.Authorization = `Bearer ${token}`;
     return headers;
+  }
+
+  /** Blob SHA needed for the next Contents API update (not the commit SHA). */
+  function nextShaFromPutResponse(payload) {
+    if (!payload || typeof payload !== 'object') return null;
+    if (payload.content && typeof payload.content.sha === 'string' && payload.content.sha) {
+      return payload.content.sha;
+    }
+    if (typeof payload.sha === 'string' && payload.sha) return payload.sha;
+    return null;
+  }
+
+  function cloneStore(raw, itemList) {
+    return normalizeStore(JSON.parse(JSON.stringify(raw || {})), itemList);
   }
 
   function decodeBase64Utf8(content) {
@@ -153,6 +172,7 @@
     const fetchFn = fetchImpl || fetch;
     const response = await fetchFn(contentsUrl(cfg), {
       headers: authHeaders(cfg),
+      cache: 'no-store',
     });
     if (!response.ok) {
       const err = new Error(`GitHub GET failed: ${response.status}`);
@@ -179,10 +199,11 @@
       branch: cfg.branch,
       sha,
     };
-    const response = await fetchFn(contentsUrl(cfg).replace(/\?ref=.*$/, ''), {
+    const response = await fetchFn(contentsUrl(cfg, { forWrite: true }), {
       method: 'PUT',
       headers: authHeaders(cfg, { 'Content-Type': 'application/json' }),
       body: JSON.stringify(body),
+      cache: 'no-store',
     });
     if (!response.ok) {
       const err = new Error(`GitHub PUT failed: ${response.status}`);
@@ -195,24 +216,41 @@
     return response.json();
   }
 
+  /**
+   * Apply mutator and PUT. Uses options.sha / options.data when present (shared
+   * in-memory state); on 409 reloads remote JSON+sha and re-applies the mutation.
+   */
   async function mutateEvidenta(mutator, options) {
     const cfg = (options && options.config) || getConfig();
     const fetchImpl = options && options.fetchImpl;
     const itemList = options && options.itemList;
-    let attempt = 0;
+    const maxAttempts = Math.max(1, Number((options && options.maxAttempts) || 3));
+    let sha = options && options.sha != null ? options.sha : null;
+    let data = options && options.data != null ? options.data : null;
     let lastError = null;
 
-    while (attempt < 2) {
-      attempt += 1;
-      const { sha, data } = await fetchEvidentaFile(cfg, fetchImpl);
-      const next = normalizeStore(mutator(normalizeStore(data, itemList), itemList), itemList);
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const mustReload = sha == null || data == null || attempt > 1;
+      if (mustReload) {
+        const remote = await fetchEvidentaFile(cfg, fetchImpl);
+        sha = remote.sha;
+        data = remote.data;
+      }
+
+      const next = normalizeStore(mutator(cloneStore(data, itemList), itemList), itemList);
       next.updatedAt = new Date().toISOString();
+
       try {
         const result = await saveEvidentaFile(next, sha, cfg, fetchImpl, options && options.message);
-        return { store: next, result, sha: result.content && result.content.sha };
+        const newSha = nextShaFromPutResponse(result);
+        return { store: next, result, sha: newSha };
       } catch (err) {
         lastError = err;
-        if (err.status === 409 && attempt < 2) continue;
+        if (err.status === 409 && attempt < maxAttempts) {
+          sha = null;
+          data = null;
+          continue;
+        }
         throw err;
       }
     }
@@ -231,6 +269,7 @@
     normalizeStore,
     getConfig,
     hasToken,
+    nextShaFromPutResponse,
     fetchEvidentaFile,
     saveEvidentaFile,
     mutateEvidenta,

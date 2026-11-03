@@ -965,17 +965,40 @@
       const { store, sha } = await mutateEvidenta(mutator, {
         config: getConfig(),
         itemList: items,
+        sha: evidentaSha,
+        data: evidentaStore,
         message: successMessage || 'Actualizare evidență rulotă',
       });
+      // Always adopt the blob SHA from the PUT response — never keep a pre-write SHA.
       evidentaStore = store;
-      evidentaSha = sha || evidentaSha;
+      evidentaSha = sha;
+      if (!evidentaSha) {
+        // Response missing sha: force a fresh GET so the next write cannot reuse a stale one.
+        try {
+          const remote = await fetchEvidentaFile(getConfig());
+          evidentaSha = remote.sha;
+          evidentaStore = normalizeStore(remote.data, items);
+        } catch (reloadErr) {
+          evidentaSha = null;
+        }
+      }
       renderEvidenta();
       setEvidentaStatus(successMessage || 'Salvat pe GitHub.', 'ok');
       return true;
     } catch (err) {
+      // After conflicts, refresh shared state so the next attempt starts from remote.
+      if (err.status === 409) {
+        try {
+          const remote = await fetchEvidentaFile(getConfig());
+          evidentaSha = remote.sha;
+          evidentaStore = normalizeStore(remote.data, items);
+        } catch (reloadErr) {
+          evidentaSha = null;
+        }
+      }
       renderEvidenta();
       if (err.status === 409) {
-        setEvidentaStatus('Conflict pe GitHub (409). Reîncarcă pagina și încearcă din nou.', 'warn');
+        setEvidentaStatus('Conflict pe GitHub (409). Starea a fost reîncărcată — încearcă din nou.', 'warn');
       } else {
         setEvidentaStatus(`Salvare eșuată: ${err.message}`, 'danger');
       }
