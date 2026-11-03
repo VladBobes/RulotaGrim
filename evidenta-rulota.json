@@ -1,5 +1,22 @@
 {
   "version": 1,
-  "updatedAt": null,
-  "entries": []
+  "updatedAt": "2026-11-03T09:47:17.986Z",
+  "entries": [
+    {
+      "id": "mw0i7psw-zmesh713",
+      "responsabil": "Bobe test",
+      "cnp": "19752",
+      "telefon": "432-9754",
+      "quantities": {
+        "plicCocaina": 100,
+        "joint": 100,
+        "tigara": 30,
+        "redFire": 5,
+        "greenHaze": 8,
+        "blueCurrent": 12
+      },
+      "taxCollected": false,
+      "createdAt": "2026-11-03T09:47:17.984Z"
+    }
+  ]
 }
