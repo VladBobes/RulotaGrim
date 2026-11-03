@@ -63,3 +63,7 @@ Detalii: `evidenta-api/README.md`.
 
 - `GET /api/evidenta` — citește
 - `PUT /api/evidenta` — înlocuiește tot documentul după fiecare mutație (adăugare, taxă, ștergere, reset)
+
+`quantities` folosește aceleași chei ca Livrare Internă / Grove (`plicCocaina`, `joint`, `tigara`, `redFire`, `greenHaze`, `blueCurrent`). La încărcare, cheile snake_case (ex. `plic_cocaina`) sau numele de afișare sunt mapate pe aceste chei.
+
+**Notă recuperare:** o versiune anterioară a UI-ului ștergea cantitățile la refresh (`normalizeStore` fără catalogul de iteme). Dacă pe disc cantitățile sunt deja `{}` / zero (ex. după toggle taxă pe un store încărcat greșit), trebuie re-adăugate manual — nu se pot reconstrui.

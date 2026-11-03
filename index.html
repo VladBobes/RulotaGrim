@@ -965,8 +965,9 @@
 
     setEvidentaStatus('Se încarcă evidența…');
     try {
-      const { data } = await fetchEvidenta(cfg);
-      evidentaStore = normalizeStore(data, items);
+      const { raw } = await fetchEvidenta(cfg, undefined, items);
+      // Re-normalize from raw API JSON with Grove item keys (avoids empty-quantity wipe).
+      evidentaStore = normalizeStore(raw, items);
       renderEvidenta();
       setEvidentaStatus(
         evidentaStore.updatedAt
@@ -1008,8 +1009,8 @@
       return true;
     } catch (err) {
       try {
-        const remote = await fetchEvidenta(cfg);
-        evidentaStore = normalizeStore(remote.data, items);
+        const remote = await fetchEvidenta(cfg, undefined, items);
+        evidentaStore = normalizeStore(remote.raw, items);
       } catch (reloadErr) {}
       renderEvidenta();
       setEvidentaStatus(`Salvare eșuată: ${err.message}`, 'danger');

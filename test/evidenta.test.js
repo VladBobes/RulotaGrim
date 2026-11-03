@@ -12,10 +12,12 @@ const {
   totalsFromEntries,
   createEntry,
   normalizeStore,
+  normalizeQuantities,
   resolveApiBaseUrl,
   hasApiBaseUrl,
   isMixedContentRisk,
   evidentaApiUrl,
+  fetchEvidenta,
   mutateEvidenta,
 } = require('../evidenta');
 
@@ -212,4 +214,106 @@ test('mutateEvidenta încarcă remote dacă data lipsește', async () => {
   assert.equal(putCount, 1);
   assert.ok(result.store.entries.some((e) => e.id === 'existing'));
   assert.ok(result.store.entries.some((e) => e.cnp === '2'));
+});
+
+test('serialize → JSON (ca API) → reload păstrează suma livrată și taxa', () => {
+  const entry = createEntry({
+    responsabil: 'Vlad',
+    cnp: '12345',
+    telefon: '0700111222',
+    quantities: {
+      plicCocaina: 10,
+      joint: 4,
+      tigara: 0,
+      redFire: 2,
+      greenHaze: 0,
+      blueCurrent: 1,
+    },
+    itemList: items,
+    now: new Date('2026-01-15T12:00:00.000Z'),
+  });
+  entry.taxCollected = true;
+
+  const beforeDelivered = entryDeliveredSum(entry, items);
+  const beforeTax = entryTax(beforeDelivered);
+  assert.ok(beforeDelivered > 0);
+  assert.ok(beforeTax > 0);
+
+  const wire = JSON.parse(JSON.stringify({
+    version: 1,
+    updatedAt: '2026-01-15T12:00:00.000Z',
+    entries: [entry],
+  }));
+
+  const reloaded = normalizeStore(wire, items);
+  assert.equal(reloaded.entries.length, 1);
+  assert.equal(reloaded.entries[0].responsabil, 'Vlad');
+  assert.equal(reloaded.entries[0].cnp, '12345');
+  assert.equal(reloaded.entries[0].telefon, '0700111222');
+  assert.equal(reloaded.entries[0].taxCollected, true);
+  assert.equal(reloaded.entries[0].quantities.plicCocaina, 10);
+  assert.equal(reloaded.entries[0].quantities.joint, 4);
+  assert.equal(reloaded.entries[0].quantities.redFire, 2);
+  assert.equal(reloaded.entries[0].quantities.blueCurrent, 1);
+
+  const afterDelivered = entryDeliveredSum(reloaded.entries[0], items);
+  const afterTax = entryTax(afterDelivered);
+  assert.equal(afterDelivered, beforeDelivered);
+  assert.equal(afterTax, beforeTax);
+  assert.ok(afterDelivered > 0);
+  assert.ok(afterTax > 0);
+
+  const totals = totalsFromEntries(reloaded.entries, items);
+  assert.equal(totals.deliveredTotal, beforeDelivered);
+  assert.equal(totals.taxTotal, beforeTax);
+  assert.equal(totals.taxUncollected, 0);
+});
+
+test('fetchEvidenta fără itemList nu șterge cantitățile; cu itemList le normalizează', async () => {
+  const payload = {
+    version: 1,
+    updatedAt: '2026-01-15T12:00:00.000Z',
+    entries: [{
+      id: 'e1',
+      responsabil: 'Ana',
+      cnp: '99',
+      telefon: '',
+      quantities: { plicCocaina: 7, joint: 0, tigara: 0, redFire: 0, greenHaze: 0, blueCurrent: 0 },
+      taxCollected: false,
+      createdAt: '2026-01-15T12:00:00.000Z',
+    }],
+  };
+
+  const fetchImpl = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => payload,
+  });
+
+  const withoutItems = await fetchEvidenta({ apiBaseUrl: '' }, fetchImpl);
+  assert.equal(withoutItems.data.entries[0].quantities.plicCocaina, 7);
+  assert.ok(entryDeliveredSum(withoutItems.data.entries[0], items) > 0);
+
+  const withItems = await fetchEvidenta({ apiBaseUrl: '' }, fetchImpl, items);
+  assert.equal(withItems.data.entries[0].quantities.plicCocaina, 7);
+  assert.equal(entryDeliveredSum(withItems.data.entries[0], items), 7 * 13600);
+  assert.ok(entryTax(entryDeliveredSum(withItems.data.entries[0], items)) > 0);
+});
+
+test('normalizeQuantities mapează aliasuri snake_case / Discord pe cheile Grove', () => {
+  const mapped = normalizeQuantities({
+    plic_cocaina: 3,
+    red_fire: 5,
+    green_haze: 1,
+    blue_current: 2,
+    joint: 4,
+    tigara: 6,
+  }, items);
+  assert.equal(mapped.plicCocaina, 3);
+  assert.equal(mapped.redFire, 5);
+  assert.equal(mapped.greenHaze, 1);
+  assert.equal(mapped.blueCurrent, 2);
+  assert.equal(mapped.joint, 4);
+  assert.equal(mapped.tigara, 6);
+  assert.ok(entryDeliveredSum({ quantities: mapped }, items) > 0);
 });

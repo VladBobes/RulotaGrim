@@ -9,16 +9,86 @@
 })(typeof window !== 'undefined' ? window : globalThis, function (root) {
   const TAX_RATE = 0.1;
 
+  /** Discord option names / snake_case aliases → allocation item keys. */
+  const QUANTITY_KEY_ALIASES = {
+    plic_cocaina: 'plicCocaina',
+    pliccocaina: 'plicCocaina',
+    'plic cocaina': 'plicCocaina',
+    'plic cocaină': 'plicCocaina',
+    joint: 'joint',
+    tigara: 'tigara',
+    țigară: 'tigara',
+    tigara_: 'tigara',
+    red_fire: 'redFire',
+    redfire: 'redFire',
+    'red fire': 'redFire',
+    green_haze: 'greenHaze',
+    greenhaze: 'greenHaze',
+    'green haze': 'greenHaze',
+    blue_current: 'blueCurrent',
+    bluecurrent: 'blueCurrent',
+    'blue current': 'blueCurrent',
+  };
+
   function emptyQuantities(itemList) {
     return Object.fromEntries((itemList || []).map((item) => [item.key, 0]));
   }
 
+  function camelToSnake(key) {
+    return String(key || '').replace(/[A-Z]/g, (ch) => `_${ch.toLowerCase()}`);
+  }
+
+  function coerceQuantity(value) {
+    const num = Number(value);
+    if (!Number.isFinite(num) || num <= 0) return 0;
+    return Math.floor(num);
+  }
+
+  function lookupRawQuantity(raw, item) {
+    if (!raw || typeof raw !== 'object') return 0;
+    const candidates = [
+      item.key,
+      camelToSnake(item.key),
+      item.name,
+      item.name && String(item.name).toLowerCase(),
+    ].filter(Boolean);
+    for (const candidate of candidates) {
+      if (Object.prototype.hasOwnProperty.call(raw, candidate)) {
+        return coerceQuantity(raw[candidate]);
+      }
+    }
+    return 0;
+  }
+
+  /**
+   * Map quantity bags onto allocation item keys.
+   * Without itemList, preserve numeric keys as-is (never wipe to {} on fetch).
+   * With itemList, also accept snake_case / Discord option / display-name aliases.
+   */
   function normalizeQuantities(raw, itemList) {
+    if (!itemList || !itemList.length) {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+      const preserved = {};
+      for (const [key, value] of Object.entries(raw)) {
+        const aliased = QUANTITY_KEY_ALIASES[String(key).toLowerCase()] || key;
+        preserved[aliased] = coerceQuantity(value);
+      }
+      return preserved;
+    }
+
     const quantities = emptyQuantities(itemList);
-    if (!raw || typeof raw !== 'object') return quantities;
-    for (const item of itemList || []) {
-      const value = Number(raw[item.key]);
-      quantities[item.key] = Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return quantities;
+
+    const remapped = {};
+    for (const [key, value] of Object.entries(raw)) {
+      const aliased = QUANTITY_KEY_ALIASES[String(key).toLowerCase()] || key;
+      remapped[aliased] = value;
+    }
+
+    for (const item of itemList) {
+      quantities[item.key] = Object.prototype.hasOwnProperty.call(remapped, item.key)
+        ? coerceQuantity(remapped[item.key])
+        : lookupRawQuantity(raw, item);
     }
     return quantities;
   }
@@ -84,15 +154,36 @@
     store.version = Number(raw.version) || 1;
     store.updatedAt = raw.updatedAt || null;
     store.entries = Array.isArray(raw.entries)
-      ? raw.entries.map((entry) => ({
-          id: String(entry.id || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`),
-          responsabil: String(entry.responsabil || '').trim(),
-          cnp: String(entry.cnp || '').trim(),
-          telefon: String(entry.telefon || '').trim(),
-          quantities: normalizeQuantities(entry.quantities, itemList),
-          taxCollected: Boolean(entry.taxCollected),
-          createdAt: entry.createdAt || null,
-        }))
+      ? raw.entries.map((entry) => {
+          const nested = entry && entry.quantities;
+          const hasNested = nested && typeof nested === 'object' && !Array.isArray(nested);
+          let quantities;
+          if (itemList && itemList.length) {
+            const fromNested = normalizeQuantities(hasNested ? nested : {}, itemList);
+            const nestedSum = Object.values(fromNested).reduce((sum, n) => sum + n, 0);
+            if (nestedSum > 0) {
+              quantities = fromNested;
+            } else {
+              // Legacy / mis-shaped: quantities on the entry root (joint: 2) or only aliases.
+              const fromFlat = normalizeQuantities(entry || {}, itemList);
+              quantities = Object.values(fromFlat).reduce((sum, n) => sum + n, 0) > 0
+                ? fromFlat
+                : fromNested;
+            }
+          } else {
+            // No catalog: preserve the nested bag; never treat responsabil/cnp as quantities.
+            quantities = normalizeQuantities(hasNested ? nested : {}, null);
+          }
+          return {
+            id: String(entry.id || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`),
+            responsabil: String(entry.responsabil || '').trim(),
+            cnp: String(entry.cnp || '').trim(),
+            telefon: String(entry.telefon || '').trim(),
+            quantities,
+            taxCollected: Boolean(entry.taxCollected),
+            createdAt: entry.createdAt || null,
+          };
+        })
       : [];
     return store;
   }
@@ -140,7 +231,7 @@
     return normalizeStore(JSON.parse(JSON.stringify(raw || {})), itemList);
   }
 
-  async function fetchEvidenta(config, fetchImpl) {
+  async function fetchEvidenta(config, fetchImpl, itemList) {
     const cfg = config || getConfig();
     const fetchFn = fetchImpl || fetch;
     const response = await fetchFn(evidentaApiUrl(cfg), {
@@ -157,7 +248,8 @@
       throw err;
     }
     const payload = await response.json();
-    return { data: normalizeStore(payload), raw: payload };
+    // Always pass itemList when available — normalizeStore without it used to wipe quantities to {}.
+    return { data: normalizeStore(payload, itemList), raw: payload };
   }
 
   async function saveEvidenta(store, config, fetchImpl) {
@@ -196,7 +288,7 @@
 
     let data = options && options.data != null ? options.data : null;
     if (data == null) {
-      const remote = await fetchEvidenta(cfg, fetchImpl);
+      const remote = await fetchEvidenta(cfg, fetchImpl, itemList);
       data = remote.data;
     }
 
