@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-11-03T09:47:17.986Z",
+  "updatedAt": "2026-11-03T09:48:19.566Z",
   "entries": [
     {
       "id": "mw0i7psw-zmesh713",
@@ -8,15 +8,31 @@
       "cnp": "19752",
       "telefon": "432-9754",
       "quantities": {
-        "plicCocaina": 100,
-        "joint": 100,
-        "tigara": 30,
-        "redFire": 5,
-        "greenHaze": 8,
-        "blueCurrent": 12
+        "plicCocaina": 0,
+        "joint": 0,
+        "tigara": 0,
+        "redFire": 0,
+        "greenHaze": 0,
+        "blueCurrent": 0
       },
       "taxCollected": false,
       "createdAt": "2026-11-03T09:47:17.984Z"
+    },
+    {
+      "id": "mw0i91bh-7z0pv56l",
+      "responsabil": "bobe test 2",
+      "cnp": "1000",
+      "telefon": "000-0001",
+      "quantities": {
+        "plicCocaina": 50,
+        "joint": 0,
+        "tigara": 0,
+        "redFire": 0,
+        "greenHaze": 0,
+        "blueCurrent": 50
+      },
+      "taxCollected": false,
+      "createdAt": "2026-11-03T09:48:19.565Z"
     }
   ]
 }
