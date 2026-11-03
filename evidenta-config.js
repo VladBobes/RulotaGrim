@@ -1,7 +1,7 @@
 window.EVIDENTA_CONFIG = {
-  owner: 'VladBobes',
-  repo: 'RulotaGrim',
-  branch: 'main',
-  path: 'evidenta-rulota.json',
-  token: 'github_pat_11AJVTSSA0RaVKXFV' + 'DbX8W_1qJt2vw6VXCDyP9SuwIOWPxaJqzHu6Xwu2K3R2RvkAaSFY4CD5NhlngdxcS' // fine-grained PAT: Contents Read+Write on this repo only
+  // Pe Oracle (http://IP:8787/) lasă gol — same-origin /api/evidenta.
+  // Pe GitHub Pages pune URL-ul Oracle, ex: 'http://YOUR_ORACLE_PUBLIC_IP:8787'
+  // Atenție: Pages e HTTPS → browserul blochează API HTTP (mixed content).
+  // Pentru Evidență deschide http://IP:8787/ (vezi EVIDENTA.md).
+  apiBaseUrl: ''
 };

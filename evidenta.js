@@ -99,114 +99,83 @@
 
   function getConfig() {
     return (root && root.EVIDENTA_CONFIG) || {
-      owner: 'VladBobes',
-      repo: 'RulotaGrim',
-      branch: 'main',
-      path: 'evidenta-rulota.json',
-      token: '',
+      apiBaseUrl: '',
     };
   }
 
-  function hasToken(config) {
-    return Boolean(config && String(config.token || '').trim());
+  function resolveApiBaseUrl(config) {
+    const cfg = config || getConfig();
+    return String((cfg && cfg.apiBaseUrl) || '').trim().replace(/\/+$/, '');
   }
 
-  function contentsUrl(config, options) {
-    const path = encodeURIComponent(config.path).replace(/%2F/g, '/');
-    const base = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${path}`;
-    if (options && options.forWrite) return base;
-    const bust = options && options.cacheBust != null ? options.cacheBust : Date.now();
-    return `${base}?ref=${encodeURIComponent(config.branch)}&_=${encodeURIComponent(String(bust))}`;
+  /** Empty apiBaseUrl = same-origin relative (/api/evidenta) — intended on Oracle. */
+  function hasApiBaseUrl(config) {
+    return resolveApiBaseUrl(config).length > 0;
   }
 
-  function authHeaders(config, extra) {
-    const headers = {
-      Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-      'Cache-Control': 'no-cache',
-      Pragma: 'no-cache',
-      ...(extra || {}),
-    };
-    const token = String((config && config.token) || '').trim();
-    if (token) headers.Authorization = `Bearer ${token}`;
-    return headers;
+  function isGitHubPagesHost() {
+    if (typeof location === 'undefined') return false;
+    return /\.github\.io$/i.test(location.hostname || '');
   }
 
-  /** Blob SHA needed for the next Contents API update (not the commit SHA). */
-  function nextShaFromPutResponse(payload) {
-    if (!payload || typeof payload !== 'object') return null;
-    if (payload.content && typeof payload.content.sha === 'string' && payload.content.sha) {
-      return payload.content.sha;
-    }
-    if (typeof payload.sha === 'string' && payload.sha) return payload.sha;
-    return null;
+  function isMixedContentRisk(config) {
+    if (typeof location === 'undefined') return false;
+    if (location.protocol !== 'https:') return false;
+    const base = resolveApiBaseUrl(config);
+    return /^http:/i.test(base);
+  }
+
+  function evidentaApiUrl(config) {
+    const base = resolveApiBaseUrl(config);
+    return `${base}/api/evidenta`;
+  }
+
+  function oracleSiteUrl(config) {
+    const base = resolveApiBaseUrl(config);
+    if (!base) return '';
+    return `${base}/`;
   }
 
   function cloneStore(raw, itemList) {
     return normalizeStore(JSON.parse(JSON.stringify(raw || {})), itemList);
   }
 
-  function decodeBase64Utf8(content) {
-    const cleaned = String(content || '').replace(/\n/g, '');
-    if (typeof atob === 'function') {
-      const binary = atob(cleaned);
-      try {
-        return decodeURIComponent(Array.from(binary, (ch) => `%${ch.charCodeAt(0).toString(16).padStart(2, '0')}`).join(''));
-      } catch (e) {
-        return binary;
-      }
-    }
-    return Buffer.from(cleaned, 'base64').toString('utf8');
-  }
-
-  function encodeBase64Utf8(text) {
-    if (typeof btoa === 'function') {
-      const utf8 = encodeURIComponent(text).replace(/%([0-9A-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
-      return btoa(utf8);
-    }
-    return Buffer.from(String(text), 'utf8').toString('base64');
-  }
-
-  async function fetchEvidentaFile(config, fetchImpl) {
+  async function fetchEvidenta(config, fetchImpl) {
     const cfg = config || getConfig();
     const fetchFn = fetchImpl || fetch;
-    const response = await fetchFn(contentsUrl(cfg), {
-      headers: authHeaders(cfg),
+    const response = await fetchFn(evidentaApiUrl(cfg), {
+      headers: {
+        Accept: 'application/json',
+        'Cache-Control': 'no-cache',
+        Pragma: 'no-cache',
+      },
       cache: 'no-store',
     });
     if (!response.ok) {
-      const err = new Error(`GitHub GET failed: ${response.status}`);
+      const err = new Error(`API GET failed: ${response.status}`);
       err.status = response.status;
       throw err;
     }
     const payload = await response.json();
-    const text = decodeBase64Utf8(payload.content);
-    const data = normalizeStore(JSON.parse(text));
-    return { sha: payload.sha, data, raw: payload };
+    return { data: normalizeStore(payload), raw: payload };
   }
 
-  async function saveEvidentaFile(store, sha, config, fetchImpl, message) {
+  async function saveEvidenta(store, config, fetchImpl) {
     const cfg = config || getConfig();
-    if (!hasToken(cfg)) {
-      const err = new Error('Token lipsă în evidenta-config.js');
-      err.code = 'missing_token';
-      throw err;
-    }
     const fetchFn = fetchImpl || fetch;
-    const body = {
-      message: message || `Actualizare evidență rulotă ${new Date().toISOString()}`,
-      content: encodeBase64Utf8(JSON.stringify(store, null, 2) + '\n'),
-      branch: cfg.branch,
-      sha,
-    };
-    const response = await fetchFn(contentsUrl(cfg, { forWrite: true }), {
+    const response = await fetchFn(evidentaApiUrl(cfg), {
       method: 'PUT',
-      headers: authHeaders(cfg, { 'Content-Type': 'application/json' }),
-      body: JSON.stringify(body),
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache',
+        Pragma: 'no-cache',
+      },
+      body: JSON.stringify(store),
       cache: 'no-store',
     });
     if (!response.ok) {
-      const err = new Error(`GitHub PUT failed: ${response.status}`);
+      const err = new Error(`API PUT failed: ${response.status}`);
       err.status = response.status;
       try {
         err.details = await response.json();
@@ -217,44 +186,24 @@
   }
 
   /**
-   * Apply mutator and PUT. Uses options.sha / options.data when present (shared
-   * in-memory state); on 409 reloads remote JSON+sha and re-applies the mutation.
+   * Apply mutator and PUT the full document to the Oracle API.
+   * Uses options.data when present (shared in-memory state); otherwise GETs first.
    */
   async function mutateEvidenta(mutator, options) {
     const cfg = (options && options.config) || getConfig();
     const fetchImpl = options && options.fetchImpl;
     const itemList = options && options.itemList;
-    const maxAttempts = Math.max(1, Number((options && options.maxAttempts) || 3));
-    let sha = options && options.sha != null ? options.sha : null;
+
     let data = options && options.data != null ? options.data : null;
-    let lastError = null;
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      const mustReload = sha == null || data == null || attempt > 1;
-      if (mustReload) {
-        const remote = await fetchEvidentaFile(cfg, fetchImpl);
-        sha = remote.sha;
-        data = remote.data;
-      }
-
-      const next = normalizeStore(mutator(cloneStore(data, itemList), itemList), itemList);
-      next.updatedAt = new Date().toISOString();
-
-      try {
-        const result = await saveEvidentaFile(next, sha, cfg, fetchImpl, options && options.message);
-        const newSha = nextShaFromPutResponse(result);
-        return { store: next, result, sha: newSha };
-      } catch (err) {
-        lastError = err;
-        if (err.status === 409 && attempt < maxAttempts) {
-          sha = null;
-          data = null;
-          continue;
-        }
-        throw err;
-      }
+    if (data == null) {
+      const remote = await fetchEvidenta(cfg, fetchImpl);
+      data = remote.data;
     }
-    throw lastError;
+
+    const next = normalizeStore(mutator(cloneStore(data, itemList), itemList), itemList);
+    next.updatedAt = new Date().toISOString();
+    const result = await saveEvidenta(next, cfg, fetchImpl);
+    return { store: normalizeStore(result, itemList), result };
   }
 
   return {
@@ -268,10 +217,14 @@
     createEntry,
     normalizeStore,
     getConfig,
-    hasToken,
-    nextShaFromPutResponse,
-    fetchEvidentaFile,
-    saveEvidentaFile,
+    resolveApiBaseUrl,
+    hasApiBaseUrl,
+    isGitHubPagesHost,
+    isMixedContentRisk,
+    evidentaApiUrl,
+    oracleSiteUrl,
+    fetchEvidenta,
+    saveEvidenta,
     mutateEvidenta,
   };
 });

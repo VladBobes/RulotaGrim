@@ -339,7 +339,7 @@
           <div class="section-head">
             <div>
               <h2>Înregistrări</h2>
-              <p class="muted" style="margin:0">Taxa = 10% din suma livrată. Bifarea „Taxă încasată” se salvează imediat pe GitHub.</p>
+              <p class="muted" style="margin:0">Taxa = 10% din suma livrată. Bifarea „Taxă încasată” se salvează imediat pe API-ul Oracle.</p>
             </div>
           </div>
           <div id="evidentaTable"></div>
@@ -780,7 +780,6 @@
 
   /* ========== Evidență Rulotă ========== */
   let evidentaStore = { version: 1, updatedAt: null, entries: [] };
-  let evidentaSha = null;
   let evidentaBusy = false;
 
   function setEvidentaBusy(busy) {
@@ -803,16 +802,33 @@
     el.textContent = text;
   }
 
-  function renderEvidentaTokenBanner() {
+  function renderEvidentaConfigBanner() {
     const el = document.getElementById('evidentaTokenBanner');
-    if (hasToken(getConfig())) {
-      el.innerHTML = '';
+    const cfg = getConfig();
+    const oracleUrl = oracleSiteUrl(cfg);
+
+    if (isMixedContentRisk(cfg)) {
+      el.innerHTML = `<div class="danger-banner">
+        <strong>Mixed content:</strong> site-ul e HTTPS, iar API-ul e HTTP (<code>${escapeHtml(resolveApiBaseUrl(cfg))}</code>).
+        Browserul blochează salvările de pe GitHub Pages.
+        ${oracleUrl
+          ? `Deschide Evidența pe Oracle: <a href="${escapeHtml(oracleUrl)}">${escapeHtml(oracleUrl)}</a>.`
+          : 'Deschide site-ul pe <code>http://IP_PUBLIC:8787/</code> (vezi <code>EVIDENTA.md</code>).'}
+      </div>`;
       return;
     }
-    el.innerHTML = `<div class="danger-banner">
-      Token lipsă în <code>evidenta-config.js</code>. Poți citi evidența dacă fișierul e public, dar adăugarea, ștergerea și bifarea taxei necesită un fine-grained PAT (Contents Read+Write) lipit în <code>token</code>, apoi commit/push pe Pages.
-      Vezi <code>EVIDENTA.md</code>.
-    </div>`;
+
+    if (!hasApiBaseUrl(cfg) && isGitHubPagesHost()) {
+      el.innerHTML = `<div class="danger-banner">
+        <code>apiBaseUrl</code> lipsește în <code>evidenta-config.js</code>.
+        Pe GitHub Pages setează URL-ul Oracle (ex. <code>http://IP_PUBLIC:8787</code>), apoi commit/push —
+        sau deschide direct <code>http://IP_PUBLIC:8787/</code> pentru Evidență (fără mixed content).
+        Vezi <code>EVIDENTA.md</code>.
+      </div>`;
+      return;
+    }
+
+    el.innerHTML = '';
   }
 
   function renderEvidentaInputs() {
@@ -926,17 +942,30 @@
   }
 
   function renderEvidenta() {
-    renderEvidentaTokenBanner();
+    renderEvidentaConfigBanner();
     renderEvidentaCapacity();
     renderEvidentaTotals();
     renderEvidentaTable();
   }
 
   async function loadEvidenta() {
-    setEvidentaStatus('Se încarcă evidența din GitHub…');
+    const cfg = getConfig();
+    if (isMixedContentRisk(cfg)) {
+      evidentaStore = { version: 1, updatedAt: null, entries: [] };
+      renderEvidenta();
+      setEvidentaStatus('Blocat de mixed content — deschide URL-ul Oracle (vezi banner).', 'warn');
+      return;
+    }
+    if (!hasApiBaseUrl(cfg) && isGitHubPagesHost()) {
+      evidentaStore = { version: 1, updatedAt: null, entries: [] };
+      renderEvidenta();
+      setEvidentaStatus('Configurează apiBaseUrl sau deschide site-ul pe Oracle.', 'warn');
+      return;
+    }
+
+    setEvidentaStatus('Se încarcă evidența…');
     try {
-      const { sha, data } = await fetchEvidentaFile(getConfig());
-      evidentaSha = sha;
+      const { data } = await fetchEvidenta(cfg);
       evidentaStore = normalizeStore(data, items);
       renderEvidenta();
       setEvidentaStatus(
@@ -947,68 +976,48 @@
       );
     } catch (err) {
       evidentaStore = { version: 1, updatedAt: null, entries: [] };
-      evidentaSha = null;
       renderEvidenta();
       setEvidentaStatus(`Nu am putut încărca evidența (${err.status || 'eroare'}). ${err.message}`, 'danger');
     }
   }
 
   async function runEvidentaMutation(mutator, successMessage) {
-    if (!hasToken(getConfig())) {
-      alert('Token lipsă în evidenta-config.js. Adaugă un fine-grained PAT cu Contents pe acest repo, apoi commit/push.');
-      renderEvidentaTokenBanner();
+    const cfg = getConfig();
+    if (isMixedContentRisk(cfg)) {
+      alert('Browserul blochează API-ul HTTP de pe un site HTTPS. Deschide Evidența pe http://IP_PUBLIC:8787/');
+      renderEvidentaConfigBanner();
       return false;
     }
+    if (!hasApiBaseUrl(cfg) && isGitHubPagesHost()) {
+      alert('Setează apiBaseUrl în evidenta-config.js la URL-ul Oracle, sau deschide http://IP_PUBLIC:8787/');
+      renderEvidentaConfigBanner();
+      return false;
+    }
+
     setEvidentaBusy(true);
-    setEvidentaStatus('Se salvează pe GitHub…');
+    setEvidentaStatus('Se salvează…');
     try {
-      const { store, sha } = await mutateEvidenta(mutator, {
-        config: getConfig(),
+      const { store } = await mutateEvidenta(mutator, {
+        config: cfg,
         itemList: items,
-        sha: evidentaSha,
         data: evidentaStore,
-        message: successMessage || 'Actualizare evidență rulotă',
       });
-      // Always adopt the blob SHA from the PUT response — never keep a pre-write SHA.
       evidentaStore = store;
-      evidentaSha = sha;
-      if (!evidentaSha) {
-        // Response missing sha: force a fresh GET so the next write cannot reuse a stale one.
-        try {
-          const remote = await fetchEvidentaFile(getConfig());
-          evidentaSha = remote.sha;
-          evidentaStore = normalizeStore(remote.data, items);
-        } catch (reloadErr) {
-          evidentaSha = null;
-        }
-      }
       renderEvidenta();
-      setEvidentaStatus(successMessage || 'Salvat pe GitHub.', 'ok');
+      setEvidentaStatus(successMessage || 'Salvat.', 'ok');
       return true;
     } catch (err) {
-      // After conflicts, refresh shared state so the next attempt starts from remote.
-      if (err.status === 409) {
-        try {
-          const remote = await fetchEvidentaFile(getConfig());
-          evidentaSha = remote.sha;
-          evidentaStore = normalizeStore(remote.data, items);
-        } catch (reloadErr) {
-          evidentaSha = null;
-        }
-      }
+      try {
+        const remote = await fetchEvidenta(cfg);
+        evidentaStore = normalizeStore(remote.data, items);
+      } catch (reloadErr) {}
       renderEvidenta();
-      if (err.status === 409) {
-        setEvidentaStatus('Conflict pe GitHub (409). Starea a fost reîncărcată — încearcă din nou.', 'warn');
-      } else {
-        setEvidentaStatus(`Salvare eșuată: ${err.message}`, 'danger');
-      }
-      alert(err.code === 'missing_token'
-        ? 'Token lipsă în evidenta-config.js.'
-        : `Nu am putut salva pe GitHub: ${err.message}`);
+      setEvidentaStatus(`Salvare eșuată: ${err.message}`, 'danger');
+      alert(`Nu am putut salva evidența: ${err.message}`);
       return false;
     } finally {
       setEvidentaBusy(false);
-      renderEvidentaTokenBanner();
+      renderEvidentaConfigBanner();
     }
   }
 
@@ -1034,7 +1043,7 @@
     const ok = await runEvidentaMutation((store) => {
       store.entries.push(entry);
       return store;
-    }, 'Înregistrare adăugată pe GitHub.');
+    }, 'Înregistrare adăugată.');
 
     if (ok) {
       document.getElementById('evidentaResponsabil').value = '';
@@ -1051,7 +1060,7 @@
       const entry = store.entries.find((row) => row.id === id);
       if (entry) entry.taxCollected = Boolean(checked);
       return store;
-    }, 'Taxă încasată actualizată pe GitHub.');
+    }, 'Taxă încasată actualizată.');
   }
 
   async function deleteEvidentaEntry(id) {
@@ -1059,7 +1068,7 @@
     await runEvidentaMutation((store) => {
       store.entries = store.entries.filter((row) => row.id !== id);
       return store;
-    }, 'Înregistrare ștearsă pe GitHub.');
+    }, 'Înregistrare ștearsă.');
   }
 
   async function resetEvidenta() {
@@ -1067,7 +1076,7 @@
     await runEvidentaMutation((store) => {
       store.entries = [];
       return store;
-    }, 'Evidența a fost resetată pe GitHub.');
+    }, 'Evidența a fost resetată.');
   }
 
   renderEvidentaInputs();

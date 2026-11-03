@@ -1,0 +1,16 @@
+[Unit]
+Description=evidenta-api (Evidență Rulotă)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/RulotaGrim/evidenta-api
+EnvironmentFile=-/home/ubuntu/RulotaGrim/evidenta-api/.env
+ExecStart=/usr/bin/node /home/ubuntu/RulotaGrim/evidenta-api/server.js
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

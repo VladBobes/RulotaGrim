@@ -1,38 +1,65 @@
 # Evidență Rulotă
 
-Persistența evidenței folosește fișierul `evidenta-rulota.json` din acest repo, citit/scris din browser prin **GitHub Contents API** (fără backend / Oracle).
+Persistența evidenței rulează pe un **API HTTP pe VM-ul Oracle** (`evidenta-api/`), nu pe GitHub Contents API.
 
-## Configurare PAT
+Datele stau în `evidenta-api/data/evidenta-rulota.json` pe disc (gitignored). Fișierul `evidenta-rulota.json` din rădăcina repo-ului e doar seed/arhivă și **nu** mai e scris din browser.
 
-1. Pe GitHub: **Settings → Developer settings → Personal access tokens → Fine-grained tokens**.
-2. Creează un token cu acces **doar** la repo-ul `VladBobes/RulotaGrim`.
-3. Permisiuni: **Contents: Read and write**.
-4. Copiază tokenul în `evidenta-config.js`:
+## De ce Oracle URL
+
+GitHub Pages e **HTTPS**. API-ul pe Oracle e **HTTP** (`:8787`). Browserul blochează `https://…github.io` → `http://IP:8787` (mixed active content).
+
+**Soluție:** deschide site-ul de pe Oracle — același server servește și staticul și API-ul:
+
+```text
+http://IP_PUBLIC:8787/
+```
+
+Pe același origin, `apiBaseUrl` poate rămâne `''` (cereri relative la `/api/evidenta`).
+
+## Config frontend
+
+`evidenta-config.js`:
 
 ```js
 window.EVIDENTA_CONFIG = {
-  owner: 'VladBobes',
-  repo: 'RulotaGrim',
-  branch: 'main',
-  path: 'evidenta-rulota.json',
-  token: 'github_pat_...' // lipeste PAT-ul aici
+  apiBaseUrl: '' // pe Oracle; pe Pages: 'http://IP_PUBLIC:8787'
 };
 ```
 
-5. Commit + push pe `main`. Dacă site-ul rulează pe **GitHub Pages**, tokenul trebuie să fie prezent în `evidenta-config.js` din branch-ul / build-ul pe care îl servește Pages.
+- **Oracle (recomandat pentru Evidență):** `apiBaseUrl: ''`
+- **GitHub Pages:** setează `apiBaseUrl` la `http://IP_PUBLIC:8787` — UI-ul arată un avertisment mixed content și te trimite pe URL-ul Oracle. Pages rămâne util pentru **Livrare Internă**.
 
-## Atenție securitate
+Nu mai există PAT / token GitHub pentru evidență. Citire și scriere sunt deschise (ca înainte).
 
-Pe un site Pages **public**, oricine poate vedea `evidenta-config.js` și tokenul. Asta e intenționat pentru modelul „oricine poate adăuga sau șterge”. Folosește un fine-grained PAT limitat la Contents pe acest repo; nu folosi un classic PAT cu acces larg.
+## Deploy Oracle (scurt)
 
-Fără token: citirea poate funcționa pe repo public; scrierea (adăugare / ștergere / taxă încasată) nu.
+1. `git pull origin main`
+2. `cd evidenta-api && npm install` (și opțional `cp .env.example .env`)
+3. Copiază unitatea systemd, `enable --now evidenta-api`
+4. Deschide ingress **TCP 8787** în Security List / NSG (`0.0.0.0/0` sau restriâns)
+5. Deschide `http://IP_PUBLIC:8787/` — pe Oracle nu e nevoie să schimbi `apiBaseUrl`
 
-## Fișier date
+Detalii: `evidenta-api/README.md`.
 
-Structură inițială în `evidenta-rulota.json`:
+## Schema date
 
 ```json
-{ "version": 1, "updatedAt": null, "entries": [] }
+{
+  "version": 1,
+  "updatedAt": null,
+  "entries": [
+    {
+      "id": "...",
+      "responsabil": "...",
+      "cnp": "...",
+      "telefon": "...",
+      "quantities": {},
+      "taxCollected": false,
+      "createdAt": "..."
+    }
+  ]
+}
 ```
 
-Salvările folosesc optimistic concurrency (`sha` din GET, trimis la PUT; la 409 se reîncearcă o dată).
+- `GET /api/evidenta` — citește
+- `PUT /api/evidenta` — înlocuiește tot documentul după fiecare mutație (adăugare, taxă, ștergere, reset)

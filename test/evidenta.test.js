@@ -12,7 +12,10 @@ const {
   totalsFromEntries,
   createEntry,
   normalizeStore,
-  nextShaFromPutResponse,
+  resolveApiBaseUrl,
+  hasApiBaseUrl,
+  isMixedContentRisk,
+  evidentaApiUrl,
   mutateEvidenta,
 } = require('../evidenta');
 
@@ -90,38 +93,47 @@ test('totalurile agregă suma livrată, taxa și taxa neîncasată', () => {
   assert.equal(totals.taxUncollected, entryTax(5 * 13600));
 });
 
-test('nextShaFromPutResponse preferă content.sha (blob), nu commit.sha', () => {
-  assert.equal(nextShaFromPutResponse({
-    content: { sha: 'blob-abc' },
-    commit: { sha: 'commit-xyz' },
-  }), 'blob-abc');
-  assert.equal(nextShaFromPutResponse({ sha: 'top-level' }), 'top-level');
-  assert.equal(nextShaFromPutResponse(null), null);
-  assert.equal(nextShaFromPutResponse({}), null);
+test('resolveApiBaseUrl taie slash-urile de la final; gol = same-origin', () => {
+  assert.equal(resolveApiBaseUrl({ apiBaseUrl: '' }), '');
+  assert.equal(resolveApiBaseUrl({ apiBaseUrl: 'http://1.2.3.4:8787/' }), 'http://1.2.3.4:8787');
+  assert.equal(hasApiBaseUrl({ apiBaseUrl: '' }), false);
+  assert.equal(hasApiBaseUrl({ apiBaseUrl: 'http://1.2.3.4:8787' }), true);
+  assert.equal(evidentaApiUrl({ apiBaseUrl: '' }), '/api/evidenta');
+  assert.equal(evidentaApiUrl({ apiBaseUrl: 'http://1.2.3.4:8787' }), 'http://1.2.3.4:8787/api/evidenta');
 });
 
-test('mutateEvidenta folosește sha local și actualizează din răspunsul PUT', async () => {
+test('isMixedContentRisk detectează https page + http API', () => {
+  const previous = globalThis.location;
+  globalThis.location = { protocol: 'https:', hostname: 'vladbobes.github.io' };
+  try {
+    assert.equal(isMixedContentRisk({ apiBaseUrl: 'http://1.2.3.4:8787' }), true);
+    assert.equal(isMixedContentRisk({ apiBaseUrl: 'https://1.2.3.4:8787' }), false);
+    assert.equal(isMixedContentRisk({ apiBaseUrl: '' }), false);
+  } finally {
+    if (previous === undefined) delete globalThis.location;
+    else globalThis.location = previous;
+  }
+});
+
+test('mutateEvidenta face PUT cu documentul complet (fără sha)', async () => {
   let getCount = 0;
   let putCount = 0;
-  let putSha = null;
+  let putBody = null;
   const localStore = normalizeStore({ version: 1, entries: [] }, items);
 
   const fetchImpl = async (url, options = {}) => {
     const method = (options.method || 'GET').toUpperCase();
+    assert.match(String(url), /\/api\/evidenta$/);
     if (method === 'GET') {
       getCount += 1;
-      throw new Error('GET should not run when local sha/data are provided');
+      throw new Error('GET should not run when local data is provided');
     }
     putCount += 1;
-    const body = JSON.parse(options.body);
-    putSha = body.sha;
+    putBody = JSON.parse(options.body);
     return {
       ok: true,
       status: 200,
-      json: async () => ({
-        content: { sha: 'sha-after-put' },
-        commit: { sha: 'commit-should-not-use' },
-      }),
+      json: async () => putBody,
     };
   };
 
@@ -135,68 +147,50 @@ test('mutateEvidenta folosește sha local și actualizează din răspunsul PUT',
     }));
     return store;
   }, {
-    config: {
-      owner: 'VladBobes',
-      repo: 'RulotaGrim',
-      branch: 'main',
-      path: 'evidenta-rulota.json',
-      token: 'test-token',
-    },
+    config: { apiBaseUrl: 'http://127.0.0.1:8787' },
     fetchImpl,
     itemList: items,
-    sha: 'sha-local',
     data: localStore,
   });
 
   assert.equal(getCount, 0);
   assert.equal(putCount, 1);
-  assert.equal(putSha, 'sha-local');
-  assert.equal(result.sha, 'sha-after-put');
+  assert.equal(putBody.entries.length, 1);
+  assert.equal(putBody.entries[0].cnp, '2');
+  assert.ok(putBody.updatedAt);
   assert.equal(localStore.entries.length, 0); // mutation pe clonă
   assert.equal(result.store.entries.length, 1);
 });
 
-test('mutateEvidenta reîncarcă și reîncearcă la conflict 409 (până la 3 încercări)', async () => {
+test('mutateEvidenta încarcă remote dacă data lipsește', async () => {
   let getCount = 0;
   let putCount = 0;
+
   const fetchImpl = async (url, options = {}) => {
     const method = (options.method || 'GET').toUpperCase();
     if (method === 'GET') {
       getCount += 1;
-      const store = {
-        version: 1,
-        updatedAt: null,
-        entries: getCount === 1 ? [] : [{
-          id: 'existing',
-          responsabil: 'X',
-          cnp: '1',
-          telefon: '',
-          quantities: { plicCocaina: 1, joint: 0, tigara: 0, redFire: 0, greenHaze: 0, blueCurrent: 0 },
-          taxCollected: false,
-          createdAt: '2020-01-01T00:00:00.000Z',
-        }],
-      };
-      const content = Buffer.from(JSON.stringify(store), 'utf8').toString('base64');
       return {
         ok: true,
         status: 200,
-        json: async () => ({ sha: `sha-${getCount}`, content }),
+        json: async () => ({
+          version: 1,
+          updatedAt: null,
+          entries: [{
+            id: 'existing',
+            responsabil: 'X',
+            cnp: '1',
+            telefon: '',
+            quantities: { plicCocaina: 1, joint: 0, tigara: 0, redFire: 0, greenHaze: 0, blueCurrent: 0 },
+            taxCollected: false,
+            createdAt: '2020-01-01T00:00:00.000Z',
+          }],
+        }),
       };
     }
-
     putCount += 1;
-    if (putCount <= 2) {
-      return {
-        ok: false,
-        status: 409,
-        json: async () => ({ message: 'Conflict' }),
-      };
-    }
-    return {
-      ok: true,
-      status: 200,
-      json: async () => ({ content: { sha: 'sha-final' } }),
-    };
+    const body = JSON.parse(options.body);
+    return { ok: true, status: 200, json: async () => body };
   };
 
   const result = await mutateEvidenta((store) => {
@@ -209,64 +203,13 @@ test('mutateEvidenta reîncarcă și reîncearcă la conflict 409 (până la 3 �
     }));
     return store;
   }, {
-    config: {
-      owner: 'VladBobes',
-      repo: 'RulotaGrim',
-      branch: 'main',
-      path: 'evidenta-rulota.json',
-      token: 'test-token',
-    },
+    config: { apiBaseUrl: '' },
     fetchImpl,
     itemList: items,
-    sha: 'sha-stale',
-    data: normalizeStore({ version: 1, entries: [] }, items),
   });
 
-  // attempt1: local sha → 409; attempt2: GET+PUT → 409; attempt3: GET+PUT → ok
-  assert.equal(getCount, 2);
-  assert.equal(putCount, 3);
-  assert.equal(result.sha, 'sha-final');
-  assert.ok(result.store.entries.some((e) => e.cnp === '2'));
+  assert.equal(getCount, 1);
+  assert.equal(putCount, 1);
   assert.ok(result.store.entries.some((e) => e.id === 'existing'));
-});
-
-test('mutateEvidenta renunță după epuizarea reîncercărilor 409', async () => {
-  let putCount = 0;
-  const fetchImpl = async (url, options = {}) => {
-    const method = (options.method || 'GET').toUpperCase();
-    if (method === 'GET') {
-      const store = { version: 1, updatedAt: null, entries: [] };
-      const content = Buffer.from(JSON.stringify(store), 'utf8').toString('base64');
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({ sha: 'sha-remote', content }),
-      };
-    }
-    putCount += 1;
-    return {
-      ok: false,
-      status: 409,
-      json: async () => ({ message: 'Conflict' }),
-    };
-  };
-
-  await assert.rejects(
-    () => mutateEvidenta((store) => store, {
-      config: {
-        owner: 'VladBobes',
-        repo: 'RulotaGrim',
-        branch: 'main',
-        path: 'evidenta-rulota.json',
-        token: 'test-token',
-      },
-      fetchImpl,
-      itemList: items,
-      sha: 'sha-local',
-      data: normalizeStore({ version: 1, entries: [] }, items),
-      maxAttempts: 3,
-    }),
-    (err) => err && err.status === 409,
-  );
-  assert.equal(putCount, 3);
+  assert.ok(result.store.entries.some((e) => e.cnp === '2'));
 });

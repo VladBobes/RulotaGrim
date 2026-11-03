@@ -4,3 +4,6 @@ bot/node_modules/
 bot-actiuni/.env
 bot-actiuni/data/
 bot-actiuni/node_modules/
+evidenta-api/.env
+evidenta-api/data/
+evidenta-api/node_modules/
