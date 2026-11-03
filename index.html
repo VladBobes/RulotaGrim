@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Calculator inventar și împărțire venituri</title>
+  <title>Rulota Grim — Evidență & Livrare</title>
   <style>
     :root {
       --navy: #0f172a;
@@ -51,6 +51,35 @@
     h2 { margin: 0 0 14px; font-size: 18px; }
     .lede { margin: 0; color: #cbd5e1; max-width: 720px; line-height: 1.5; }
     .app { padding: 24px 24px 0; }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 0 0 18px;
+      padding: 6px;
+      background: #e2e8f0;
+      border-radius: 16px;
+      width: fit-content;
+      max-width: 100%;
+    }
+    .tab-btn {
+      margin: 0;
+      width: auto;
+      border: 0;
+      border-radius: 12px;
+      padding: 10px 16px;
+      background: transparent;
+      color: #334155;
+      font-weight: 800;
+      box-shadow: none;
+    }
+    .tab-btn.active {
+      background: white;
+      color: var(--navy);
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+    }
+    .panel { display: none; }
+    .panel.active { display: block; }
     .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; }
     .card {
       background: var(--card);
@@ -86,6 +115,7 @@
     button:hover { filter: brightness(1.05); }
     button.secondary { background: #eef3ff; color: #1f4fbf; }
     button.danger { background: var(--danger-bg); color: var(--danger); }
+    button:disabled { opacity: .55; cursor: not-allowed; filter: none; }
     table { width: 100%; border-collapse: collapse; overflow: hidden; }
     th, td { border-bottom: 1px solid #edf0f6; padding: 10px; text-align: left; vertical-align: top; }
     th { color: #44506a; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
@@ -107,8 +137,9 @@
     .muted { color: var(--muted); font-size: 13px; }
     .warning { background: var(--warn-bg); border: 1px solid #fed7aa; color: var(--warn); padding: 10px 12px; border-radius: 12px; }
     .ok { background: var(--ok-bg); border: 1px solid #bbf7d0; color: var(--ok); padding: 10px 12px; border-radius: 12px; }
-    .actions { display: flex; gap: 8px; }
-    .actions button { margin-top: 0; }
+    .danger-banner { background: var(--danger-bg); border: 1px solid #fecdd3; color: var(--danger); padding: 10px 12px; border-radius: 12px; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .actions button { margin-top: 0; width: auto; }
     .trailer-grid {
       display: grid;
       grid-template-columns: repeat(5, 1fr);
@@ -158,6 +189,7 @@
     }
     .cap-box label { margin: 0 0 8px; }
     .cap-box .value { font-size: 22px; font-weight: 800; letter-spacing: -.03em; }
+    .cap-box .value.over { color: var(--danger); }
     .cap-box .usage { margin-top: 8px; }
     .bar {
       height: 7px;
@@ -202,12 +234,43 @@
     .qty-field label { margin-top: 0; }
     .table-wrap { overflow-x: auto; }
     .result-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .divider {
+      height: 1px;
+      background: var(--line);
+      margin: 16px 0;
+    }
+    .totals-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+    .total-box {
+      border: 1px solid var(--line);
+      background: #f8fafc;
+      border-radius: 14px;
+      padding: 14px;
+    }
+    .total-box .label { font-size: 12px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+    .total-box .value { margin-top: 8px; font-size: 22px; font-weight: 800; letter-spacing: -.03em; }
+    .checkbox-cell {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .checkbox-cell input {
+      width: 18px;
+      height: 18px;
+      margin: 0;
+      padding: 0;
+      accent-color: var(--blue);
+    }
+    .status-line { margin: 0 0 12px; }
     @media (max-width: 1100px) {
       .trailer-grid, .capacity-grid { grid-template-columns: repeat(3, 1fr); }
     }
     @media (max-width: 900px) {
       .span-4, .span-8 { grid-column: span 12; }
-      .items, .row { grid-template-columns: 1fr; }
+      .items, .row, .totals-grid { grid-template-columns: 1fr; }
       .trailer-grid, .capacity-grid { grid-template-columns: repeat(2, 1fr); }
       h1 { font-size: 24px; }
     }
@@ -221,73 +284,154 @@
   <header class="topbar">
     <div class="topbar-inner">
       <div class="eyebrow">GTA V RageMP</div>
-      <h1>Calculator inventar și împărțire venituri</h1>
-      <p class="lede">Alege rulota, introdu cantitățile jucătorilor și calculează livrarea. Capacitățile maxime se schimbă automat după preset, iar la Custom le setezi tu.</p>
+      <h1>Rulota Grim</h1>
+      <p class="lede">Evidență livrări pe Grove și calculator de împărțire pentru Livrare Internă.</p>
     </div>
   </header>
 
   <div class="app">
-    <div class="grid">
-      <section class="card span-12">
-        <div class="section-head">
-          <div>
-            <h2>Rulotă</h2>
-            <p class="muted" style="margin:0">Selectează un preset sau treci pe Custom ca să modifici fiecare cantitate maximă.</p>
+    <nav class="tabs" role="tablist" aria-label="Secțiuni">
+      <button type="button" class="tab-btn active" id="tab-evidenta" role="tab" aria-selected="true" onclick="switchAppTab('evidenta')">Evidență Rulotă</button>
+      <button type="button" class="tab-btn" id="tab-livrare" role="tab" aria-selected="false" onclick="switchAppTab('livrare')">Livrare Internă</button>
+    </nav>
+
+    <div id="panel-evidenta" class="panel active" role="tabpanel">
+      <div class="grid">
+        <section class="card span-12">
+          <div class="section-head">
+            <div>
+              <h2>Capacitate rămasă — Grove</h2>
+              <p class="muted" style="margin:0">Maxim Grove minus cantitățile din toate înregistrările. Poți adăuga și peste capacitate; restul negativ apare ca avertizare.</p>
+            </div>
+            <span class="badge">Grove</span>
           </div>
-          <div id="activeTrailerBadge"></div>
-        </div>
-        <div class="trailer-grid" id="trailerGrid"></div>
-        <div id="capacityPanel"></div>
-      </section>
+          <div id="evidentaTokenBanner" class="status-line"></div>
+          <div id="evidentaStatus" class="status-line muted"></div>
+          <div id="evidentaCapacityPanel"></div>
+        </section>
 
-      <section class="card span-4 player-form">
-        <h2>Adaugă jucător</h2>
-        <label>Nume</label>
-        <input id="playerName" placeholder="Ex: Vlad" />
+        <section class="card span-12">
+          <h2>Totaluri</h2>
+          <div id="evidentaTotals" class="totals-grid"></div>
+        </section>
 
-        <label>CNP / ID intern, 1–5 cifre</label>
-        <input id="playerCnp" inputmode="numeric" maxlength="5" placeholder="Ex: 12345" />
+        <section class="card span-4 player-form">
+          <h2>Adaugă înregistrare</h2>
+          <label for="evidentaResponsabil">Responsabil</label>
+          <input id="evidentaResponsabil" placeholder="Ex: Vlad" />
 
-        <div class="items" id="itemInputs"></div>
+          <div class="divider" aria-hidden="true"></div>
 
-        <button onclick="addPlayer()">Adaugă jucător</button>
-        <button class="secondary" onclick="calculate()">Calculează împărțirea</button>
-        <button class="danger" onclick="resetAll()">Resetează tot</button>
-        <p class="muted">Logica alocă proporțional cererea când cererea totală depășește capacitatea rulotei pe fiecare tip de drog din joc.</p>
-      </section>
+          <label for="evidentaCnp">CNP / ID intern, 1–5 cifre</label>
+          <input id="evidentaCnp" inputmode="numeric" maxlength="5" placeholder="Ex: 12345" />
 
-      <section class="card span-8">
-        <h2>Jucători introduși</h2>
-        <div id="playersTable"></div>
-      </section>
+          <label for="evidentaTelefon">Număr de telefon</label>
+          <input id="evidentaTelefon" inputmode="tel" placeholder="Ex: 07xxxxxxxx" />
 
-      <section class="card span-12">
-        <div class="section-head">
-          <div class="result-title">
-            <h2>Rezultat calcul</h2>
-            <div id="resultTrailerBadge"></div>
+          <div class="items" id="evidentaItemInputs"></div>
+
+          <button id="evidentaAddBtn" onclick="addEvidentaEntry()">Adaugă în evidență</button>
+          <button class="danger" id="evidentaResetBtn" onclick="resetEvidenta()">Resetează tot</button>
+          <p class="muted">Același CNP poate apărea de mai multe ori. Nu există alocare automată — se salvează exact cantitățile introduse.</p>
+        </section>
+
+        <section class="card span-8">
+          <div class="section-head">
+            <div>
+              <h2>Înregistrări</h2>
+              <p class="muted" style="margin:0">Taxa = 10% din suma livrată. Bifarea „Taxă încasată” se salvează imediat pe GitHub.</p>
+            </div>
           </div>
-        </div>
-        <div id="result"></div>
-      </section>
+          <div id="evidentaTable"></div>
+        </section>
+      </div>
+    </div>
 
-      <section class="card span-12">
-        <h2>Salvare / încărcare locală</h2>
-        <div class="row">
-          <button class="secondary" onclick="exportJson()">Exportă JSON</button>
-          <button class="secondary" onclick="exportTextAllocation()">Exportă alocare text</button>
-          <label style="margin:0">
-            Importă JSON
-            <input type="file" accept="application/json" onchange="importJson(event)" />
-          </label>
-        </div>
-        <textarea id="jsonOutput" rows="8" placeholder="Aici apare exportul JSON sau textul de livrare"></textarea>
-      </section>
+    <div id="panel-livrare" class="panel" role="tabpanel">
+      <div class="grid">
+        <section class="card span-12">
+          <div class="section-head">
+            <div>
+              <h2>Rulotă</h2>
+              <p class="muted" style="margin:0">Selectează un preset sau treci pe Custom ca să modifici fiecare cantitate maximă.</p>
+            </div>
+            <div id="activeTrailerBadge"></div>
+          </div>
+          <div class="trailer-grid" id="trailerGrid"></div>
+          <div id="capacityPanel"></div>
+        </section>
+
+        <section class="card span-4 player-form">
+          <h2>Adaugă jucător</h2>
+          <label>Nume</label>
+          <input id="playerName" placeholder="Ex: Vlad" />
+
+          <label>CNP / ID intern, 1–5 cifre</label>
+          <input id="playerCnp" inputmode="numeric" maxlength="5" placeholder="Ex: 12345" />
+
+          <div class="items" id="itemInputs"></div>
+
+          <button onclick="addPlayer()">Adaugă jucător</button>
+          <button class="secondary" onclick="calculate()">Calculează împărțirea</button>
+          <button class="danger" onclick="resetAll()">Resetează tot</button>
+          <p class="muted">Logica alocă proporțional cererea când cererea totală depășește capacitatea rulotei pe fiecare tip de drog din joc.</p>
+        </section>
+
+        <section class="card span-8">
+          <h2>Jucători introduși</h2>
+          <div id="playersTable"></div>
+        </section>
+
+        <section class="card span-12">
+          <div class="section-head">
+            <div class="result-title">
+              <h2>Rezultat calcul</h2>
+              <div id="resultTrailerBadge"></div>
+            </div>
+          </div>
+          <div id="result"></div>
+        </section>
+
+        <section class="card span-12">
+          <h2>Salvare / încărcare locală</h2>
+          <div class="row">
+            <button class="secondary" onclick="exportJson()">Exportă JSON</button>
+            <button class="secondary" onclick="exportTextAllocation()">Exportă alocare text</button>
+            <label style="margin:0">
+              Importă JSON
+              <input type="file" accept="application/json" onchange="importJson(event)" />
+            </label>
+          </div>
+          <textarea id="jsonOutput" rows="8" placeholder="Aici apare exportul JSON sau textul de livrare"></textarea>
+        </section>
+      </div>
     </div>
   </div>
 
+<script src="evidenta-config.js"></script>
 <script src="allocation.js"></script>
+<script src="evidenta.js"></script>
 <script>
+  function escapeHtml(value) {
+    return String(value)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+
+  function switchAppTab(tab) {
+    const evidenta = tab === 'evidenta';
+    document.getElementById('panel-evidenta').classList.toggle('active', evidenta);
+    document.getElementById('panel-livrare').classList.toggle('active', !evidenta);
+    document.getElementById('tab-evidenta').classList.toggle('active', evidenta);
+    document.getElementById('tab-livrare').classList.toggle('active', !evidenta);
+    document.getElementById('tab-evidenta').setAttribute('aria-selected', evidenta ? 'true' : 'false');
+    document.getElementById('tab-livrare').setAttribute('aria-selected', evidenta ? 'false' : 'true');
+  }
+
+  /* ========== Livrare Internă ========== */
   let players = JSON.parse(localStorage.getItem('players') || '[]');
   let selectedTrailerId = localStorage.getItem('selectedTrailerId') || 'grove';
   if (!TRAILER_PRESETS.some(t => t.id === selectedTrailerId)) selectedTrailerId = 'grove';
@@ -628,20 +772,284 @@
     reader.readAsText(file);
   }
 
-  function escapeHtml(value) {
-    return String(value)
-      .replaceAll('&', '&amp;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;')
-      .replaceAll('"', '&quot;')
-      .replaceAll("'", '&#039;');
-  }
-
   applyTrailerCapacities();
   renderTrailer();
   renderInputs();
   renderPlayers();
   calculate();
+
+  /* ========== Evidență Rulotă ========== */
+  let evidentaStore = { version: 1, updatedAt: null, entries: [] };
+  let evidentaSha = null;
+  let evidentaBusy = false;
+
+  function setEvidentaBusy(busy) {
+    evidentaBusy = busy;
+    document.getElementById('evidentaAddBtn').disabled = busy;
+    document.getElementById('evidentaResetBtn').disabled = busy;
+    document.querySelectorAll('#evidentaTable input[type="checkbox"], #evidentaTable button').forEach((el) => {
+      el.disabled = busy;
+    });
+  }
+
+  function setEvidentaStatus(text, kind) {
+    const el = document.getElementById('evidentaStatus');
+    if (!text) {
+      el.className = 'status-line muted';
+      el.textContent = '';
+      return;
+    }
+    el.className = kind === 'ok' ? 'status-line ok' : kind === 'warn' ? 'status-line warning' : kind === 'danger' ? 'status-line danger-banner' : 'status-line muted';
+    el.textContent = text;
+  }
+
+  function renderEvidentaTokenBanner() {
+    const el = document.getElementById('evidentaTokenBanner');
+    if (hasToken(getConfig())) {
+      el.innerHTML = '';
+      return;
+    }
+    el.innerHTML = `<div class="danger-banner">
+      Token lipsă în <code>evidenta-config.js</code>. Poți citi evidența dacă fișierul e public, dar adăugarea, ștergerea și bifarea taxei necesită un fine-grained PAT (Contents Read+Write) lipit în <code>token</code>, apoi commit/push pe Pages.
+      Vezi <code>EVIDENTA.md</code>.
+    </div>`;
+  }
+
+  function renderEvidentaInputs() {
+    const previous = {};
+    items.forEach((item) => {
+      const el = document.getElementById(`evidenta_qty_${item.key}`);
+      if (el) previous[item.key] = el.value;
+    });
+    document.getElementById('evidentaItemInputs').innerHTML = items.map((item) => `
+      <div class="qty-field">
+        <label>${escapeHtml(item.name)}</label>
+        <input id="evidenta_qty_${item.key}" type="number" min="0" step="1" placeholder="0" />
+        <div class="muted">Cap Grove: ${qty(GROVE_CAPS[item.key])}, preț: ${money(item.price)}</div>
+      </div>
+    `).join('');
+    items.forEach((item) => {
+      if (previous[item.key]) document.getElementById(`evidenta_qty_${item.key}`).value = previous[item.key];
+    });
+  }
+
+  function renderEvidentaCapacity() {
+    const remaining = remainingCapacities(evidentaStore.entries, GROVE_CAPS, items);
+    document.getElementById('evidentaCapacityPanel').innerHTML = `
+      <div class="capacity-grid">
+        ${items.map((item) => {
+          const left = remaining[item.key] || 0;
+          const max = GROVE_CAPS[item.key] || 0;
+          const used = max - left;
+          const over = left < 0;
+          const percent = max > 0 ? Math.min(100, Math.round((Math.max(used, 0) / max) * 100)) : (used > 0 ? 100 : 0);
+          return `
+            <div class="cap-box">
+              <label>${escapeHtml(item.name)}</label>
+              <div class="value ${over ? 'over' : ''}">${qty(left)}</div>
+              <div class="usage muted">${over ? `peste cap (${qty(Math.abs(left))} în minus)` : `${qty(used)} folosite · ${qty(max)} max`}</div>
+              <div class="bar ${over ? 'over' : ''}"><span style="width:${percent}%"></span></div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  function renderEvidentaTotals() {
+    const totals = totalsFromEntries(evidentaStore.entries, items);
+    document.getElementById('evidentaTotals').innerHTML = `
+      <div class="total-box">
+        <div class="label">Sumă livrată total</div>
+        <div class="value">${money(totals.deliveredTotal)}</div>
+      </div>
+      <div class="total-box">
+        <div class="label">Taxe totale (10%)</div>
+        <div class="value">${money(totals.taxTotal)}</div>
+      </div>
+      <div class="total-box">
+        <div class="label">Taxă neîncasată</div>
+        <div class="value">${money(totals.taxUncollected)}</div>
+      </div>
+    `;
+  }
+
+  function renderEvidentaTable() {
+    const el = document.getElementById('evidentaTable');
+    if (!evidentaStore.entries.length) {
+      el.innerHTML = '<p class="muted">Nu există înregistrări în evidență.</p>';
+      return;
+    }
+
+    const rows = [...evidentaStore.entries].reverse();
+    el.innerHTML = `
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Responsabil</th>
+              <th>CNP</th>
+              <th>Telefon</th>
+              <th>Cantități</th>
+              <th>Sumă livrată</th>
+              <th>Taxă</th>
+              <th>Taxă încasată</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((entry) => {
+              const delivered = entryDeliveredSum(entry, items);
+              const tax = entryTax(delivered);
+              return `
+                <tr>
+                  <td>${escapeHtml(entry.responsabil)}</td>
+                  <td>${escapeHtml(entry.cnp)}</td>
+                  <td>${escapeHtml(entry.telefon || '—')}</td>
+                  <td>${items.map((i) => entry.quantities[i.key] ? `<span class="pill">${escapeHtml(i.name)}: ${qty(entry.quantities[i.key])}</span>` : '').join('')}</td>
+                  <td><strong>${money(delivered)}</strong></td>
+                  <td>${money(tax)}</td>
+                  <td>
+                    <label class="checkbox-cell">
+                      <input type="checkbox" ${entry.taxCollected ? 'checked' : ''} onchange="toggleEvidentaTax('${escapeHtml(entry.id)}', this.checked)" ${evidentaBusy ? 'disabled' : ''} />
+                      <span>${entry.taxCollected ? 'Da' : 'Nu'}</span>
+                    </label>
+                  </td>
+                  <td><button class="danger" onclick="deleteEvidentaEntry('${escapeHtml(entry.id)}')" ${evidentaBusy ? 'disabled' : ''}>Șterge</button></td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  function renderEvidenta() {
+    renderEvidentaTokenBanner();
+    renderEvidentaCapacity();
+    renderEvidentaTotals();
+    renderEvidentaTable();
+  }
+
+  async function loadEvidenta() {
+    setEvidentaStatus('Se încarcă evidența din GitHub…');
+    try {
+      const { sha, data } = await fetchEvidentaFile(getConfig());
+      evidentaSha = sha;
+      evidentaStore = normalizeStore(data, items);
+      renderEvidenta();
+      setEvidentaStatus(
+        evidentaStore.updatedAt
+          ? `Actualizat: ${new Date(evidentaStore.updatedAt).toLocaleString('ro-RO')}`
+          : 'Evidență încărcată.',
+        'ok',
+      );
+    } catch (err) {
+      evidentaStore = { version: 1, updatedAt: null, entries: [] };
+      evidentaSha = null;
+      renderEvidenta();
+      setEvidentaStatus(`Nu am putut încărca evidența (${err.status || 'eroare'}). ${err.message}`, 'danger');
+    }
+  }
+
+  async function runEvidentaMutation(mutator, successMessage) {
+    if (!hasToken(getConfig())) {
+      alert('Token lipsă în evidenta-config.js. Adaugă un fine-grained PAT cu Contents pe acest repo, apoi commit/push.');
+      renderEvidentaTokenBanner();
+      return false;
+    }
+    setEvidentaBusy(true);
+    setEvidentaStatus('Se salvează pe GitHub…');
+    try {
+      const { store, sha } = await mutateEvidenta(mutator, {
+        config: getConfig(),
+        itemList: items,
+        message: successMessage || 'Actualizare evidență rulotă',
+      });
+      evidentaStore = store;
+      evidentaSha = sha || evidentaSha;
+      renderEvidenta();
+      setEvidentaStatus(successMessage || 'Salvat pe GitHub.', 'ok');
+      return true;
+    } catch (err) {
+      renderEvidenta();
+      if (err.status === 409) {
+        setEvidentaStatus('Conflict pe GitHub (409). Reîncarcă pagina și încearcă din nou.', 'warn');
+      } else {
+        setEvidentaStatus(`Salvare eșuată: ${err.message}`, 'danger');
+      }
+      alert(err.code === 'missing_token'
+        ? 'Token lipsă în evidenta-config.js.'
+        : `Nu am putut salva pe GitHub: ${err.message}`);
+      return false;
+    } finally {
+      setEvidentaBusy(false);
+      renderEvidentaTokenBanner();
+    }
+  }
+
+  async function addEvidentaEntry() {
+    const responsabil = document.getElementById('evidentaResponsabil').value.trim();
+    const cnp = document.getElementById('evidentaCnp').value.trim();
+    const telefon = document.getElementById('evidentaTelefon').value.trim();
+
+    if (!responsabil) return alert('Adaugă responsabilul.');
+    if (!isValidCnp(cnp)) return alert('CNP/ID trebuie să aibă 1–5 cifre.');
+
+    const quantities = {};
+    let total = 0;
+    for (const item of items) {
+      const value = Number(document.getElementById(`evidenta_qty_${item.key}`).value || 0);
+      if (!Number.isInteger(value) || value < 0) return alert(`Cantitatea pentru ${item.name} trebuie să fie număr întreg pozitiv.`);
+      quantities[item.key] = value;
+      total += value;
+    }
+    if (total === 0) return alert('Adaugă cel puțin o cantitate.');
+
+    const entry = createEntry({ responsabil, cnp, telefon, quantities, itemList: items });
+    const ok = await runEvidentaMutation((store) => {
+      store.entries.push(entry);
+      return store;
+    }, 'Înregistrare adăugată pe GitHub.');
+
+    if (ok) {
+      document.getElementById('evidentaResponsabil').value = '';
+      document.getElementById('evidentaCnp').value = '';
+      document.getElementById('evidentaTelefon').value = '';
+      items.forEach((item) => {
+        document.getElementById(`evidenta_qty_${item.key}`).value = '';
+      });
+    }
+  }
+
+  async function toggleEvidentaTax(id, checked) {
+    await runEvidentaMutation((store) => {
+      const entry = store.entries.find((row) => row.id === id);
+      if (entry) entry.taxCollected = Boolean(checked);
+      return store;
+    }, 'Taxă încasată actualizată pe GitHub.');
+  }
+
+  async function deleteEvidentaEntry(id) {
+    if (!confirm('Ștergi această înregistrare?')) return;
+    await runEvidentaMutation((store) => {
+      store.entries = store.entries.filter((row) => row.id !== id);
+      return store;
+    }, 'Înregistrare ștearsă pe GitHub.');
+  }
+
+  async function resetEvidenta() {
+    if (!confirm('Sigur ștergi TOATE înregistrările din evidență?')) return;
+    await runEvidentaMutation((store) => {
+      store.entries = [];
+      return store;
+    }, 'Evidența a fost resetată pe GitHub.');
+  }
+
+  renderEvidentaInputs();
+  renderEvidenta();
+  loadEvidenta();
 </script>
 </body>
 </html>
